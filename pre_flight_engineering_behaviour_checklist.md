@@ -1,0 +1,9 @@
+<!-- ... existing code ... -->
+## 2. 🗄️ Two-Layer Architecture: `ESPN API → Database Layer (football_db.js) → Webpage UI Layer (premier_league_predictor.html)`
+
+* [x] **Strict Separation of Concerns**:
+  * **Database & ESPN Ingestion Layer (`football_db.js`)**: Owns all seed data (`plTeamsData`, `laLigaTeamsData`, `uclTeamsData`, `leagueFixturesData`), `localStorage` persistence, club code resolution (`matchTeamNameToCode`, `resolveOrRegisterTeamFromESPN`), and all ESPN API harvesting (`FootballDB.syncFromESPN(leagueKey, forceRefresh)`).
+  * **Dual ESPN Schedule Harvester (`/schedule` + `/schedule?fixture=true`)**: Because ESPN's Soccer `/teams/{id}/schedule` endpoint returns completed matches (`GW1`–`GW11`) by default and requires `?fixture=true` to return upcoming unplayed fixtures (`GW12`–`GW38`), `FootballDB.syncFromESPN` queries **both** endpoints for all 20 clubs, deduplicates by `ev.id`, and indexes all 38 league fixtures chronologically (`0..37` → `GW1`..`GW38`) without allowing `GW1` matches to spill into `GW12`.
+  * **Rule for All Future ESPN API Updates**: Whenever we fetch or update data from the ESPN API (standings, 380-match schedules, kickoff times, or 5-match forms), **all API parsing and data writes MUST happen strictly inside the Database Layer (`football_db.js`)**, never written or mutated directly inside the Webpage UI layer (`premier_league_predictor.html`).
+  * **Webpage Presentation & Poisson Engine Layer (`premier_league_predictor.html`)**: Strictly a consumer of `window.FootballDB`. It reads verified teams, standings, and Gameweek fixtures via `FootballDB.getLeague(leagueKey)` and `FootballDB.getRoundFixtures(leagueKey, roundCode)`, and triggers database updates via `await FootballDB.syncFromESPN(leagueKey, forceRefresh)`.
+<!-- ... existing code ... -->
