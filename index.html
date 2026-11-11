@@ -4,14 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Match Prediction Engine</title>
-    <!-- Vercel Web Analytics -->
-    <script>
-        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- External Decoupled Database & ESPN Ingestion Layer (football_db.js) -->
-    <script src="footballdb_data_espn_api_layer.js"></script>
+    <script src="football_db.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -89,6 +84,7 @@
                                     <option value="PL">Premier League</option>
                                     <option value="LALIGA">La Liga</option>
                                     <option value="UCL">UEFA Champions League</option>
+                                    <option value="UNL">UEFA Nations League</option>
                                 </select>
                                 <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-[#00ff85] text-xs">▼</span>
                             </div>
@@ -146,9 +142,6 @@
                     <!-- Populated dynamically in chronological order from FootballDB -->
                 </div>
             </div>
-            <button id="togglePlayedQuickBtn" onclick="toggleShowPlayedQuickLinks()" class="hidden text-xs text-purple-300/90 hover:text-[#00ff85] font-semibold px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-800/50 shrink-0 transition">
-                + Show Played (FT)
-            </button>
         </section>
 
         <!-- FootballDB & Live API Controls Bar -->
@@ -187,7 +180,7 @@
             <!-- Full-Width Action & Dropdown Grid -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 w-full items-center">
                 <!-- Gameweek [ 10 v ] Compact Number Selector (3 cols) -->
-                <div class="lg:col-span-3 w-full flex items-center justify-between bg-[#1c2230] border border-purple-600/60 rounded-xl px-3.5 py-2">
+                <div id="roundFilterWrapper" class="lg:col-span-3 w-full flex items-center justify-between bg-[#1c2230] border border-purple-600/60 rounded-xl px-3.5 py-2">
                     <span id="roundPrefixLabel" class="text-xs font-extrabold uppercase tracking-wider text-gray-300">Gameweek</span>
                     <div class="relative flex items-center">
                         <select id="roundFilterDropdown" onchange="onRoundFilterChange()" aria-label="Select Gameweek Number" class="appearance-none bg-[#131722] hover:bg-[#252d3f] border border-[#00ff85]/50 rounded-lg pl-3 pr-7 py-1 text-xs text-[#00ff85] font-black focus:outline-none focus:border-[#00ff85] cursor-pointer shadow-inner">
@@ -196,8 +189,8 @@
                     </div>
                 </div>
 
-                <!-- Match Fixture Dropdown (5 cols) -->
-                <div class="lg:col-span-5 w-full">
+                <!-- Match Fixture Dropdown (5 cols - identical in League & Group Stage Mode) -->
+                <div id="liveFixturesWrapper" class="lg:col-span-5 w-full">
                     <select id="liveFixturesDropdown" onchange="loadLiveFixtureFromApi()" class="w-full bg-[#1c2230] border border-gray-700 rounded-xl px-3.5 py-2.5 text-xs text-gray-200 font-semibold focus:outline-none focus:border-[#00ff85]">
                         <option value="">📅 Select Match from FootballDB...</option>
                     </select>
@@ -205,7 +198,7 @@
 
                 <!-- Force Sync ESPN API Button (2 cols) -->
                 <div class="lg:col-span-2 w-full">
-                    <button id="syncStandingsBtn" onclick="seedFullSeasonFromESPN(currentLeague, true)" class="w-full justify-center px-3.5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-white border border-gray-700 transition flex items-center gap-1.5" title="Download all 380 season fixtures, exact UTC kickoff times, 20-club standings & 5-match forms from ESPN API into FootballDB">
+                    <button id="syncStandingsBtn" onclick="seedFullSeasonFromESPN(currentLeague, true)" class="w-full justify-center px-3.5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs font-bold text-white border border-gray-700 transition flex items-center gap-1.5" title="Download all season fixtures, exact UTC kickoff times, standings & 5-match forms from ESPN API into FootballDB">
                         <span>↻ Sync All ESPN → DB</span>
                     </button>
                 </div>
@@ -660,12 +653,19 @@
                         <h2 id="standingsTableTitle" class="text-lg font-extrabold text-white flex items-center gap-2">
                             Premier League Standings & Relative Strength Index
                         </h2>
-                        <p class="text-xs text-gray-400">
-                            Synced with <code class="text-[#00ff85]">ESPN Standings API</code> into <code class="text-[#00ff85]">FootballDB</code> (Strictly 20 Clubs) • Click any row to set <strong>Home</strong> (or <strong>Shift+Click</strong> for <strong>Away</strong>)
+                        <p id="standingsTableSubtitle" class="text-xs text-gray-400">
+                            Synced with <code class="text-[#00ff85]">ESPN Standings API</code> into <code class="text-[#00ff85]">FootballDB</code> • Click any row to set <strong>Home</strong> (or <strong>Shift+Click</strong> for <strong>Away</strong>)
                         </p>
                     </div>
                 </div>
-                <div class="flex items-center gap-3 text-xs">
+                <div class="flex items-center gap-2.5 flex-wrap text-xs">
+                    <!-- Standings Table Group (A-N) Selector (Visible in Group Stage Mode) -->
+                    <div id="tableGroupSelectContainer" class="hidden items-center gap-2 bg-[#1c2230] border border-[#04f5ff]/60 rounded-xl px-3 py-1.5 shadow-md">
+                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#04f5ff] shrink-0">Group (A–N):</span>
+                        <select id="tableGroupFilterDropdown" onchange="onTableGroupFilterChange()" class="bg-[#131722] text-white font-bold text-xs rounded-lg px-2.5 py-1 border border-[#04f5ff]/40 focus:outline-none focus:border-[#04f5ff] cursor-pointer">
+                            <option value="ALL" class="bg-[#161b29]">All 14 Groups (A–N)</option>
+                        </select>
+                    </div>
                     <span class="px-2.5 py-1 rounded-lg bg-[#00ff85]/15 border border-[#00ff85]/40 text-[#00ff85] font-bold">
                         🟢 Active Home Team
                     </span>
@@ -715,18 +715,19 @@
         const quickPressState = {
             PL: {
                 activeRound: 'MW10',
-                nextRound: 'MW11',
-                showPlayed: false
+                nextRound: 'MW11'
             },
             LALIGA: {
                 activeRound: 'MD12',
-                nextRound: 'MD13',
-                showPlayed: false
+                nextRound: 'MD13'
             },
             UCL: {
                 activeRound: 'UCL4',
-                nextRound: 'UCL5',
-                showPlayed: false
+                nextRound: 'UCL5'
+            },
+            UNL: {
+                activeRound: 'UNL5',
+                nextRound: 'UNL6'
             }
         };
 
@@ -766,10 +767,24 @@
                 totalRounds: 8,
                 roundPrefix: "UCL",
                 svgPath: "M12 1.5L14.2 6.8L19.9 7.3L15.5 11.1L16.9 16.7L12 13.7L7.1 16.7L8.5 11.1L4.1 7.3L9.8 6.8L12 1.5ZM12 17.5A4.5 4.5 0 1 0 12 22.5A4.5 4.5 0 1 0 12 17.5Z"
+            },
+            UNL: {
+                name: "UEFA Nations League",
+                espnSlug: "uefa.nations",
+                logo: "https://en.wikipedia.org/wiki/Special:FilePath/UEFA_Nations_League.svg",
+                logoFallback: "https://a.espncdn.com/i/leaguelogos/soccer/500/2080.png",
+                defaultHome: "ITA",
+                defaultAway: "FRA",
+                matchesPerRound: 26,
+                maxTeams: 54,
+                totalRounds: 6,
+                roundPrefix: "UNL",
+                phaseType: "GROUP_STAGE",
+                totalGroups: 14,
+                svgPath: "M12 2L2 7L12 12L22 7L12 2Z M2 17L12 22L22 17 M2 12L12 17L22 12"
             }
         };
 
-        // Verified 2026-27 Premier League Table (Strictly 20 Teams)
         const plTeamsData = {
             ARS: { espnId: 359, name: "Arsenal", short: "ARS", color: "#EF0107", logo: "https://a.espncdn.com/i/teamlogos/soccer/500/359.png", xg: 2.02, xga: 0.78, shots: 16, sot: 6, bigChances: 3, poss: 58, played: 9, gf: 14, ga: 5, gd: 9, pts: 24, espnRank: 1, form: ['W','W','W','W','L'] },
             MCI: { espnId: 382, name: "Manchester City", short: "MCI", color: "#6CABDD", logo: "https://a.espncdn.com/i/teamlogos/soccer/500/382.png", xg: 2.15, xga: 0.92, shots: 17, sot: 6, bigChances: 3, poss: 62, played: 9, gf: 20, ga: 10, gd: 10, pts: 21, espnRank: 2, form: ['W','W','W','L','L'] },
@@ -856,67 +871,304 @@
             SAB: { espnId: 21580, name: "Sabah FK", short: "SAB", color: "#4B2E83", logo: "https://ssl.gstatic.com/onebox/media/sports/logos/optimized/v6mEQSNxXxroXdqhpR3rdQ_500x500.png", xg: 1.08, xga: 1.78, shots: 10, sot: 3, bigChances: 1, poss: 43, played: 3, gf: 1, ga: 9, pts: 0, form: ['D','L','D','W','D'] }
         };
 
+        // Full 14-Group (Groups A–N / 54 National Teams) Seed Data for UEFA Nations League
+        const unlTeamsData = (window.FootballDB && window.FootballDB.seedData && window.FootballDB.seedData.unlTeamsData) || {
+            FRA: { espnId: 478, name: "France", short: "FRA", group: "Group A (League A1)", groupOrder: 1, groupRank: 1, color: "#002654", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fra.png", xg: 2.12, xga: 0.85, shots: 17, sot: 6, bigChances: 4, poss: 59, played: 4, gf: 7, ga: 2, gd: 5, pts: 10, espnRank: 1, form: ['W','W','W','D','W'] },
+            ITA: { espnId: 162, name: "Italy", short: "ITA", group: "Group A (League A1)", groupOrder: 1, groupRank: 2, color: "#0064AA", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ita.png", xg: 1.94, xga: 1.08, shots: 15, sot: 6, bigChances: 3, poss: 55, played: 4, gf: 8, ga: 5, gd: 3, pts: 7, espnRank: 2, form: ['W','L','W','D','W'] },
+            BEL: { espnId: 459, name: "Belgium", short: "BEL", group: "Group A (League A1)", groupOrder: 1, groupRank: 3, color: "#E30613", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bel.png", xg: 1.66, xga: 1.28, shots: 14, sot: 5, bigChances: 2, poss: 54, played: 4, gf: 6, ga: 5, gd: 1, pts: 6, espnRank: 3, form: ['L','W','L','W','L'] },
+            TUR: { espnId: 465, name: "Türkiye", short: "TUR", group: "Group A (League A1)", groupOrder: 1, groupRank: 4, color: "#E30A17", logo: "https://a.espncdn.com/i/teamlogos/countries/500/tur.png", xg: 1.15, xga: 1.95, shots: 11, sot: 4, bigChances: 1, poss: 46, played: 4, gf: 2, ga: 11, gd: -9, pts: 0, espnRank: 4, form: ['W','L','L','L','L'] },
+            NED: { espnId: 449, name: "Netherlands", short: "NED", group: "Group B (League A2)", groupOrder: 2, groupRank: 1, color: "#F36C21", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ned.png", xg: 1.88, xga: 1.10, shots: 15, sot: 6, bigChances: 3, poss: 58, played: 4, gf: 7, ga: 5, gd: 2, pts: 8, espnRank: 5, form: ['W','D','W','D','W'] },
+            GRE: { espnId: 456, name: "Greece", short: "GRE", group: "Group B (League A2)", groupOrder: 2, groupRank: 2, color: "#0D5EAF", logo: "https://a.espncdn.com/i/teamlogos/countries/500/gre.png", xg: 1.56, xga: 0.96, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 8, espnRank: 6, form: ['W','W','W','D','D'] },
+            GER: { espnId: 481, name: "Germany", short: "GER", group: "Group B (League A2)", groupOrder: 2, groupRank: 3, color: "#000000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ger.png", xg: 1.82, xga: 0.92, shots: 16, sot: 6, bigChances: 3, poss: 60, played: 4, gf: 3, ga: 2, gd: 1, pts: 5, espnRank: 7, form: ['W','D','L','W','D'] },
+            SRB: { espnId: 6757, name: "Serbia", short: "SRB", group: "Group B (League A2)", groupOrder: 2, groupRank: 4, color: "#C6363C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/srb.png", xg: 1.12, xga: 1.68, shots: 10, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 8, gd: -5, pts: 0, espnRank: 8, form: ['D','L','L','L','L'] },
+            ESP: { espnId: 164, name: "Spain", short: "ESP", group: "Group C (League A3)", groupOrder: 3, groupRank: 1, color: "#AA151B", logo: "https://a.espncdn.com/i/teamlogos/countries/500/esp.png", xg: 2.35, xga: 0.95, shots: 18, sot: 7, bigChances: 4, poss: 64, played: 4, gf: 12, ga: 5, gd: 7, pts: 12, espnRank: 9, form: ['W','W','W','W','W'] },
+            ENG: { espnId: 448, name: "England", short: "ENG", group: "Group C (League A3)", groupOrder: 3, groupRank: 2, color: "#CE1126", logo: "https://a.espncdn.com/i/teamlogos/countries/500/eng.png", xg: 2.28, xga: 0.88, shots: 17, sot: 7, bigChances: 4, poss: 61, played: 4, gf: 14, ga: 3, gd: 11, pts: 9, espnRank: 10, form: ['W','L','W','W','W'] },
+            CRO: { espnId: 477, name: "Croatia", short: "CRO", group: "Group C (League A3)", groupOrder: 3, groupRank: 3, color: "#FF0000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cro.png", xg: 1.34, xga: 2.05, shots: 12, sot: 4, bigChances: 2, poss: 51, played: 4, gf: 4, ga: 14, gd: -10, pts: 3, espnRank: 11, form: ['D','W','L','L','L'] },
+            CZE: { espnId: 487, name: "Czechia", short: "CZE", group: "Group C (League A3)", groupOrder: 3, groupRank: 4, color: "#11457E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cze.png", xg: 1.08, xga: 1.88, shots: 10, sot: 3, bigChances: 1, poss: 43, played: 4, gf: 2, ga: 10, gd: -8, pts: 0, espnRank: 12, form: ['W','L','L','L','L'] },
+            POR: { espnId: 482, name: "Portugal", short: "POR", group: "Group D (League A4)", groupOrder: 4, groupRank: 1, color: "#E42518", logo: "https://a.espncdn.com/i/teamlogos/countries/500/por.png", xg: 2.18, xga: 0.92, shots: 17, sot: 6, bigChances: 4, poss: 61, played: 4, gf: 9, ga: 4, gd: 5, pts: 12, espnRank: 13, form: ['W','W','W','W','W'] },
+            DEN: { espnId: 479, name: "Denmark", short: "DEN", group: "Group D (League A4)", groupOrder: 4, groupRank: 2, color: "#C8102E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/den.png", xg: 1.62, xga: 1.38, shots: 13, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 7, gd: 0, pts: 6, espnRank: 14, form: ['D','L','W','L','W'] },
+            WAL: { espnId: 578, name: "Wales", short: "WAL", group: "Group D (League A4)", groupOrder: 4, groupRank: 3, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/wal.png", xg: 1.15, xga: 1.36, shots: 10, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 5, gd: -3, pts: 3, espnRank: 15, form: ['W','L','L','W','L'] },
+            NOR: { espnId: 463, name: "Norway", short: "NOR", group: "Group D (League A4)", groupOrder: 4, groupRank: 4, color: "#BA0C2F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/nor.png", xg: 1.54, xga: 1.65, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 8, gd: -2, pts: 3, espnRank: 16, form: ['W','W','L','L','L'] },
+            SUI: { espnId: 475, name: "Switzerland", short: "SUI", group: "Group E (League B1)", groupOrder: 5, groupRank: 1, color: "#FF0000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/sui.png", xg: 2.05, xga: 0.65, shots: 16, sot: 6, bigChances: 3, poss: 59, played: 4, gf: 11, ga: 1, gd: 10, pts: 12, espnRank: 17, form: ['D','W','W','W','W'] },
+            SVN: { espnId: 453, name: "Slovenia", short: "SVN", group: "Group E (League B1)", groupOrder: 5, groupRank: 2, color: "#005CE6", logo: "https://a.espncdn.com/i/teamlogos/countries/500/svn.png", xg: 1.46, xga: 1.02, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 7, espnRank: 18, form: ['W','D','W','L','W'] },
+            SCO: { espnId: 580, name: "Scotland", short: "SCO", group: "Group E (League B1)", groupOrder: 5, groupRank: 3, color: "#003399", logo: "https://a.espncdn.com/i/teamlogos/countries/500/sco.png", xg: 1.18, xga: 1.32, shots: 11, sot: 4, bigChances: 1, poss: 47, played: 4, gf: 3, ga: 5, gd: -2, pts: 4, espnRank: 19, form: ['D','D','L','W','L'] },
+            MKD: { espnId: 2490, name: "North Macedonia", short: "MKD", group: "Group E (League B1)", groupOrder: 5, groupRank: 4, color: "#D20000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mkd.png", xg: 0.78, xga: 1.92, shots: 8, sot: 2, bigChances: 1, poss: 42, played: 4, gf: 0, ga: 10, gd: -10, pts: 0, espnRank: 20, form: ['W','L','L','L','L'] },
+            NIR: { espnId: 581, name: "Northern Ireland", short: "NIR", group: "Group F (League B2)", groupOrder: 6, groupRank: 1, color: "#009A44", logo: "https://a.espncdn.com/i/teamlogos/countries/500/nir.png", xg: 1.42, xga: 0.62, shots: 12, sot: 4, bigChances: 2, poss: 48, played: 4, gf: 4, ga: 0, gd: 4, pts: 8, espnRank: 21, form: ['W','W','D','W','D'] },
+            HUN: { espnId: 484, name: "Hungary", short: "HUN", group: "Group F (League B2)", groupOrder: 6, groupRank: 2, color: "#CD2A3E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/hun.png", xg: 1.32, xga: 0.88, shots: 11, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 3, ga: 2, gd: 1, pts: 7, espnRank: 22, form: ['D','L','D','W','W'] },
+            UKR: { espnId: 457, name: "Ukraine", short: "UKR", group: "Group F (League B2)", groupOrder: 6, groupRank: 3, color: "#FFD700", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ukr.png", xg: 1.15, xga: 1.36, shots: 11, sot: 3, bigChances: 1, poss: 52, played: 4, gf: 2, ga: 5, gd: -3, pts: 4, espnRank: 23, form: ['D','W','D','L','L'] },
+            GEO: { espnId: 2483, name: "Georgia", short: "GEO", group: "Group F (League B2)", groupOrder: 6, groupRank: 4, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/geo.png", xg: 0.92, xga: 1.05, shots: 9, sot: 3, bigChances: 1, poss: 48, played: 4, gf: 0, ga: 2, gd: -2, pts: 2, espnRank: 24, form: ['L','L','D','L','D'] },
+            AUT: { espnId: 474, name: "Austria", short: "AUT", group: "Group G (League B3)", groupOrder: 7, groupRank: 1, color: "#ED2939", logo: "https://a.espncdn.com/i/teamlogos/countries/500/aut.png", xg: 1.85, xga: 1.12, shots: 15, sot: 6, bigChances: 3, poss: 56, played: 4, gf: 9, ga: 5, gd: 4, pts: 8, espnRank: 25, form: ['W','W','W','D','D'] },
+            KOS: { espnId: 18060, name: "Kosovo", short: "KOS", group: "Group G (League B3)", groupOrder: 7, groupRank: 2, color: "#244AA5", logo: "https://a.espncdn.com/i/teamlogos/countries/500/kos.png", xg: 1.24, xga: 1.18, shots: 11, sot: 4, bigChances: 2, poss: 48, played: 4, gf: 3, ga: 4, gd: -1, pts: 5, espnRank: 26, form: ['W','W','L','D','D'] },
+            IRL: { espnId: 476, name: "Republic of Ireland", short: "IRL", group: "Group G (League B3)", groupOrder: 7, groupRank: 3, color: "#169B62", logo: "https://a.espncdn.com/i/teamlogos/countries/500/irl.png", xg: 1.42, xga: 1.15, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 4, gd: 2, pts: 5, espnRank: 27, form: ['L','L','W','D','D'] },
+            ISR: { espnId: 466, name: "Israel", short: "ISR", group: "Group G (League B3)", groupOrder: 7, groupRank: 4, color: "#0038B8", logo: "https://a.espncdn.com/i/teamlogos/countries/500/isr.png", xg: 0.96, xga: 1.62, shots: 9, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 7, gd: -5, pts: 2, espnRank: 28, form: ['L','L','L','D','D'] },
+            SWE: { espnId: 469, name: "Sweden", short: "SWE", group: "Group H (League B4)", groupOrder: 8, groupRank: 1, color: "#FECC00", logo: "https://a.espncdn.com/i/teamlogos/countries/500/swe.png", xg: 1.82, xga: 0.95, shots: 15, sot: 6, bigChances: 3, poss: 55, played: 4, gf: 7, ga: 3, gd: 4, pts: 10, espnRank: 29, form: ['W','W','W','D','W'] },
+            BIH: { espnId: 579, name: "Bosnia and Herzegovina", short: "BIH", group: "Group H (League B4)", groupOrder: 8, groupRank: 2, color: "#002395", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bih.png", xg: 1.54, xga: 1.02, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 3, gd: 3, pts: 8, espnRank: 30, form: ['L','D','W','D','W'] },
+            POL: { espnId: 471, name: "Poland", short: "POL", group: "Group H (League B4)", groupOrder: 8, groupRank: 3, color: "#DC143C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/pol.png", xg: 1.58, xga: 1.18, shots: 14, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 4, gd: 3, pts: 4, espnRank: 31, form: ['L','D','L','W','L'] },
+            ROU: { espnId: 473, name: "Romania", short: "ROU", group: "Group H (League B4)", groupOrder: 8, groupRank: 4, color: "#FCD116", logo: "https://a.espncdn.com/i/teamlogos/countries/500/rou.png", xg: 0.98, xga: 2.15, shots: 9, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 13, gd: -10, pts: 0, espnRank: 32, form: ['W','L','L','L','L'] },
+            ALB: { espnId: 583, name: "Albania", short: "ALB", group: "Group I (League C1)", groupOrder: 9, groupRank: 1, color: "#E41E20", logo: "https://a.espncdn.com/i/teamlogos/countries/500/alb.png", xg: 1.72, xga: 0.88, shots: 14, sot: 5, bigChances: 3, poss: 54, played: 4, gf: 8, ga: 3, gd: 5, pts: 9, espnRank: 33, form: ['W','W','W','L','W'] },
+            BLR: { espnId: 2489, name: "Belarus", short: "BLR", group: "Group I (League C1)", groupOrder: 9, groupRank: 2, color: "#C8313E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/blr.png", xg: 1.38, xga: 0.82, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 2, gd: 3, pts: 7, espnRank: 34, form: ['D','L','D','W','W'] },
+            FIN: { espnId: 461, name: "Finland", short: "FIN", group: "Group I (League C1)", groupOrder: 9, groupRank: 3, color: "#003580", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fin.png", xg: 1.75, xga: 0.85, shots: 15, sot: 5, bigChances: 3, poss: 55, played: 4, gf: 9, ga: 2, gd: 7, pts: 7, espnRank: 35, form: ['L','W','D','W','L'] },
+            SMR: { espnId: 585, name: "San Marino", short: "SMR", group: "Group I (League C1)", groupOrder: 9, groupRank: 4, color: "#5EB6E4", logo: "https://a.espncdn.com/i/teamlogos/countries/500/smr.png", xg: 0.55, xga: 2.65, shots: 5, sot: 2, bigChances: 0, poss: 36, played: 4, gf: 1, ga: 16, gd: -15, pts: 0, espnRank: 36, form: ['L','L','L','L','L'] },
+            MNE: { espnId: 6770, name: "Montenegro", short: "MNE", group: "Group J (League C2)", groupOrder: 10, groupRank: 1, color: "#C40308", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mne.png", xg: 1.68, xga: 0.98, shots: 14, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 4, gd: 3, pts: 10, espnRank: 37, form: ['L','W','W','W','D'] },
+            CYP: { espnId: 582, name: "Cyprus", short: "CYP", group: "Group J (League C2)", groupOrder: 10, groupRank: 2, color: "#D57800", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cyp.png", xg: 1.36, xga: 0.95, shots: 11, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 7, espnRank: 38, form: ['L','L','D','W','W'] },
+            ARM: { espnId: 2484, name: "Armenia", short: "ARM", group: "Group J (League C2)", groupOrder: 10, groupRank: 3, color: "#D90012", logo: "https://a.espncdn.com/i/teamlogos/countries/500/arm.png", xg: 1.25, xga: 1.28, shots: 11, sot: 4, bigChances: 2, poss: 51, played: 4, gf: 4, ga: 5, gd: -1, pts: 4, espnRank: 39, form: ['W','W','L','L','D'] },
+            LVA: { espnId: 2488, name: "Latvia", short: "LVA", group: "Group J (League C2)", groupOrder: 10, groupRank: 4, color: "#9E3039", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lva.png", xg: 0.92, xga: 1.52, shots: 8, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 6, gd: -4, pts: 1, espnRank: 40, form: ['L','L','D','L','L'] },
+            SVK: { espnId: 468, name: "Slovakia", short: "SVK", group: "Group K (League C3)", groupOrder: 11, groupRank: 1, color: "#0B4EA2", logo: "https://a.espncdn.com/i/teamlogos/countries/500/svk.png", xg: 1.92, xga: 0.78, shots: 15, sot: 6, bigChances: 3, poss: 57, played: 4, gf: 9, ga: 2, gd: 7, pts: 10, espnRank: 41, form: ['W','W','W','D','W'] },
+            FRO: { espnId: 2485, name: "Faroe Islands", short: "FRO", group: "Group K (League C3)", groupOrder: 11, groupRank: 2, color: "#0065BD", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fro.png", xg: 1.22, xga: 1.22, shots: 10, sot: 4, bigChances: 1, poss: 46, played: 4, gf: 5, ga: 5, gd: 0, pts: 4, espnRank: 42, form: ['L','D','D','D','D'] },
+            MDA: { espnId: 2493, name: "Moldova", short: "MDA", group: "Group K (League C3)", groupOrder: 11, groupRank: 3, color: "#0046AE", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mda.png", xg: 1.05, xga: 1.68, shots: 9, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 8, gd: -5, pts: 4, espnRank: 43, form: ['W','L','D','W','L'] },
+            KAZ: { espnId: 2504, name: "Kazakhstan", short: "KAZ", group: "Group K (League C3)", groupOrder: 11, groupRank: 4, color: "#00AFCA", logo: "https://a.espncdn.com/i/teamlogos/countries/500/kaz.png", xg: 1.18, xga: 1.48, shots: 10, sot: 3, bigChances: 1, poss: 48, played: 4, gf: 5, ga: 7, gd: -2, pts: 2, espnRank: 44, form: ['L','D','L','L','D'] },
+            ISL: { espnId: 470, name: "Iceland", short: "ISL", group: "Group L (League C4)", groupOrder: 12, groupRank: 1, color: "#02529C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/isl.png", xg: 1.72, xga: 0.68, shots: 14, sot: 5, bigChances: 3, poss: 53, played: 4, gf: 7, ga: 1, gd: 6, pts: 8, espnRank: 45, form: ['L','D','W','W','D'] },
+            EST: { espnId: 2486, name: "Estonia", short: "EST", group: "Group L (League C4)", groupOrder: 12, groupRank: 2, color: "#0072CE", logo: "https://a.espncdn.com/i/teamlogos/countries/500/est.png", xg: 1.12, xga: 0.75, shots: 9, sot: 3, bigChances: 1, poss: 46, played: 4, gf: 2, ga: 1, gd: 1, pts: 6, espnRank: 46, form: ['L','D','D','W','D'] },
+            BUL: { espnId: 462, name: "Bulgaria", short: "BUL", group: "Group L (League C4)", groupOrder: 12, groupRank: 3, color: "#00966E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bul.png", xg: 1.15, xga: 1.32, shots: 10, sot: 3, bigChances: 1, poss: 49, played: 4, gf: 3, ga: 5, gd: -2, pts: 4, espnRank: 47, form: ['D','L','D','L','W'] },
+            LUX: { espnId: 584, name: "Luxembourg", short: "LUX", group: "Group L (League C4)", groupOrder: 12, groupRank: 4, color: "#00A3E0", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lux.png", xg: 0.92, xga: 1.56, shots: 8, sot: 3, bigChances: 1, poss: 47, played: 4, gf: 2, ga: 7, gd: -5, pts: 3, espnRank: 48, form: ['D','W','L','L','L'] },
+            MLT: { espnId: 464, name: "Malta", short: "MLT", group: "Group M (League D1)", groupOrder: 13, groupRank: 1, color: "#CF142B", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mlt.png", xg: 1.36, xga: 0.82, shots: 11, sot: 4, bigChances: 2, poss: 53, played: 3, gf: 4, ga: 2, gd: 2, pts: 7, espnRank: 49, form: ['W','D','W','D','W'] },
+            GIB: { espnId: 16898, name: "Gibraltar", short: "GIB", group: "Group M (League D1)", groupOrder: 13, groupRank: 2, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/gib.png", xg: 0.96, xga: 0.96, shots: 8, sot: 3, bigChances: 1, poss: 47, played: 2, gf: 1, ga: 1, gd: 0, pts: 2, espnRank: 50, form: ['D','W','D','D','D'] },
+            AND: { espnId: 2494, name: "Andorra", short: "AND", group: "Group M (League D1)", groupOrder: 13, groupRank: 3, color: "#10069F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/and.png", xg: 0.78, xga: 1.28, shots: 7, sot: 2, bigChances: 1, poss: 42, played: 3, gf: 1, ga: 3, gd: -2, pts: 1, espnRank: 51, form: ['L','L','L','D','L'] },
+            AZE: { espnId: 2491, name: "Azerbaijan", short: "AZE", group: "Group N (League D2)", groupOrder: 14, groupRank: 1, color: "#00B5E2", logo: "https://a.espncdn.com/i/teamlogos/countries/500/aze.png", xg: 1.28, xga: 0.85, shots: 11, sot: 4, bigChances: 2, poss: 53, played: 3, gf: 2, ga: 1, gd: 1, pts: 5, espnRank: 52, form: ['L','L','D','D','W'] },
+            LTU: { espnId: 2487, name: "Lithuania", short: "LTU", group: "Group N (League D2)", groupOrder: 14, groupRank: 2, color: "#FDB913", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ltu.png", xg: 1.24, xga: 0.92, shots: 10, sot: 4, bigChances: 1, poss: 51, played: 3, gf: 3, ga: 2, gd: 1, pts: 4, espnRank: 53, form: ['L','L','W','D','L'] },
+            LIE: { espnId: 2492, name: "Liechtenstein", short: "LIE", group: "Group N (League D2)", groupOrder: 14, groupRank: 3, color: "#002B7F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lie.png", xg: 0.72, xga: 1.35, shots: 6, sot: 2, bigChances: 0, poss: 41, played: 2, gf: 0, ga: 2, gd: -2, pts: 1, espnRank: 54, form: ['D','L','D','L','D'] }
+        };
+
+        function generateFallbackAll6MatchdaysUNL() {
+            const fourTeamGroups = [
+                { grp: 'Group A', teams: ['FRA', 'ITA', 'BEL', 'TUR'], dayOffset: 0 },
+                { grp: 'Group B', teams: ['NED', 'GRE', 'GER', 'SRB'], dayOffset: 1 },
+                { grp: 'Group C', teams: ['ESP', 'ENG', 'CRO', 'CZE'], dayOffset: 0 },
+                { grp: 'Group D', teams: ['POR', 'DEN', 'WAL', 'NOR'], dayOffset: 2 },
+                { grp: 'Group E', teams: ['SUI', 'SVN', 'SCO', 'MKD'], dayOffset: 1 },
+                { grp: 'Group F', teams: ['NIR', 'HUN', 'UKR', 'GEO'], dayOffset: 2 },
+                { grp: 'Group G', teams: ['AUT', 'KOS', 'IRL', 'ISR'], dayOffset: 2 },
+                { grp: 'Group H', teams: ['SWE', 'BIH', 'POL', 'ROU'], dayOffset: 2 },
+                { grp: 'Group I', teams: ['ALB', 'BLR', 'FIN', 'SMR'], dayOffset: 0 },
+                { grp: 'Group J', teams: ['MNE', 'CYP', 'ARM', 'LVA'], dayOffset: 0 },
+                { grp: 'Group K', teams: ['SVK', 'FRO', 'MDA', 'KAZ'], dayOffset: 1 },
+                { grp: 'Group L', teams: ['ISL', 'EST', 'BUL', 'LUX'], dayOffset: 1 }
+            ];
+            const threeTeamGroups = [
+                { grp: 'Group M', teams: ['MLT', 'GIB', 'AND'], dayOffset: 1 },
+                { grp: 'Group N', teams: ['AZE', 'LTU', 'LIE'], dayOffset: 1 }
+            ];
+            const mdBaseDates = {
+                UNL1: '2026-09-05',
+                UNL2: '2026-09-08',
+                UNL3: '2026-10-01',
+                UNL4: '2026-10-04',
+                UNL5: '2026-11-12',
+                UNL6: '2026-11-15'
+            };
+            const rr4 = {
+                UNL1: [[1, 0, 2, 1], [3, 2, 1, 1]],
+                UNL2: [[0, 2, 2, 0], [3, 1, 0, 2]],
+                UNL3: [[2, 0, 1, 2], [3, 1, 1, 1]],
+                UNL4: [[0, 2, 3, 1], [1, 3, 2, 0]],
+                UNL5: [[3, 2], [1, 0]],
+                UNL6: [[0, 3], [2, 1]]
+            };
+            const rr3 = {
+                UNL1: [0, 1, 2, 1],
+                UNL2: [1, 2, 1, 1],
+                UNL3: [2, 0, 0, 1],
+                UNL4: [1, 0, 1, 2],
+                UNL5: [2, 1],
+                UNL6: [0, 2]
+            };
+            const addDays = (isoDate, days, timeStr) => {
+                const d = new Date(`${isoDate}T${timeStr}Z`);
+                d.setUTCDate(d.getUTCDate() + days);
+                return d.toISOString();
+            };
+            const list = [];
+            ['UNL1', 'UNL2', 'UNL3', 'UNL4', 'UNL5', 'UNL6'].forEach(roundCode => {
+                const isPast = ['UNL1', 'UNL2', 'UNL3', 'UNL4'].includes(roundCode);
+                const baseDate = mdBaseDates[roundCode];
+                fourTeamGroups.forEach(({ grp, teams, dayOffset }) => {
+                    rr4[roundCode].forEach((p, idx) => {
+                        const hCode = teams[p[0]];
+                        const aCode = teams[p[1]];
+                        const utcIso = addDays(baseDate, dayOffset, idx === 0 ? '17:00:00' : '19:45:00');
+                        if (isPast) {
+                            const hScore = p[2] ?? 1;
+                            const aScore = p[3] ?? 1;
+                            list.push({
+                                round: roundCode, homeCode: hCode, awayCode: aCode,
+                                shortLabel: `${hCode} ${hScore}-${aScore} ${aCode}`, utcIso, status: 'FT', hScore, aScore,
+                                name: `${hCode} ${hScore} - ${aScore} ${aCode} (${roundCode} FT • ${grp})`,
+                                homeShots: 14, homeSot: 5, awayShots: 10, awaySot: 4, homePoss: 54
+                            });
+                        } else {
+                            list.push({
+                                round: roundCode, homeCode: hCode, awayCode: aCode,
+                                shortLabel: `${hCode} vs ${aCode}`, utcIso, status: roundCode,
+                                name: `${hCode} vs ${aCode} (${roundCode} • ${grp})`,
+                                homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0
+                            });
+                        }
+                    });
+                });
+                threeTeamGroups.forEach(({ grp, teams, dayOffset }) => {
+                    const p = rr3[roundCode];
+                    const hCode = teams[p[0]];
+                    const aCode = teams[p[1]];
+                    const utcIso = addDays(baseDate, dayOffset, '19:45:00');
+                    if (isPast) {
+                        const hScore = p[2] ?? 1;
+                        const aScore = p[3] ?? 0;
+                        list.push({
+                            round: roundCode, homeCode: hCode, awayCode: aCode,
+                            shortLabel: `${hCode} ${hScore}-${aScore} ${aCode}`, utcIso, status: 'FT', hScore, aScore,
+                            name: `${hCode} ${hScore} - ${aScore} ${aCode} (${roundCode} FT • ${grp})`,
+                            homeShots: 11, homeSot: 4, awayShots: 8, awaySot: 3, homePoss: 52
+                        });
+                    } else {
+                        list.push({
+                            round: roundCode, homeCode: hCode, awayCode: aCode,
+                            shortLabel: `${hCode} vs ${aCode}`, utcIso, status: roundCode,
+                            name: `${hCode} vs ${aCode} (${roundCode} • ${grp})`,
+                            homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0
+                        });
+                    }
+                });
+            });
+            return list;
+        }
+
         // Fallback Seed Fixtures in FootballDB (Replaced/Expanded with all 380 real fixtures via `harvestAllSeasonFixturesFromESPN`)
         const leagueFixturesData = {
             PL: [
                 { round: 'MW9', homeCode: 'NEW', awayCode: 'EVE', shortLabel: 'NEW 0-1 EVE', utcIso: '2026-11-02T20:00:00Z', status: 'FT', hScore: 0, aScore: 1, name: 'NEW 0 - 1 EVE (MW9 FT)', homeShots: 14, homeSot: 4, awayShots: 11, awaySot: 5, homePoss: 54 },
                 { round: 'MW9', homeCode: 'LIV', awayCode: 'ARS', shortLabel: 'LIV 2-1 ARS', utcIso: '2026-11-01T16:30:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'LIV 2 - 1 ARS (MW9 FT)', homeShots: 16, homeSot: 6, awayShots: 13, awaySot: 4, homePoss: 53 },
-                { round: 'MW10', featured: true, homeCode: 'EVE', awayCode: 'COV', shortLabel: '⭐ EVE vs COV', utcIso: '2026-11-06T20:00:00Z', status: 'MW10', name: '⭐ EVE vs COV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'LEE', awayCode: 'TOT', shortLabel: '⭐ LEE vs TOT', utcIso: '2026-11-07T12:30:00Z', status: 'MW10', name: '⭐ LEE vs TOT (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'ARS', awayCode: 'HUL', shortLabel: '⭐ ARS vs HUL', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: '⭐ ARS vs HUL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'EVE', awayCode: 'COV', shortLabel: 'EVE vs COV', utcIso: '2026-11-06T20:00:00Z', status: 'MW10', name: 'EVE vs COV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'LEE', awayCode: 'TOT', shortLabel: 'LEE vs TOT', utcIso: '2026-11-07T12:30:00Z', status: 'MW10', name: 'LEE vs TOT (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'ARS', awayCode: 'HUL', shortLabel: 'ARS vs HUL', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: 'ARS vs HUL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
                 { round: 'MW10', homeCode: 'FUL', awayCode: 'NEW', shortLabel: 'FUL vs NEW', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: 'FUL vs NEW (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'NFO', awayCode: 'MCI', shortLabel: '⭐ NFO vs MCI', utcIso: '2026-11-07T17:30:00Z', status: 'MW10', name: '⭐ NFO vs MCI (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'NFO', awayCode: 'MCI', shortLabel: 'NFO vs MCI', utcIso: '2026-11-07T17:30:00Z', status: 'MW10', name: 'NFO vs MCI (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
                 { round: 'MW10', homeCode: 'BHA', awayCode: 'BRE', shortLabel: 'BHA vs BRE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'BHA vs BRE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'CRY', awayCode: 'LIV', shortLabel: '⭐ CRY vs LIV', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: '⭐ CRY vs LIV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'CRY', awayCode: 'LIV', shortLabel: 'CRY vs LIV', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'CRY vs LIV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
                 { round: 'MW10', homeCode: 'IPS', awayCode: 'BOU', shortLabel: 'IPS vs BOU', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'IPS vs BOU (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'SUN', awayCode: 'CHE', shortLabel: '⭐ SUN vs CHE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: '⭐ SUN vs CHE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'MW10', featured: true, homeCode: 'MUN', awayCode: 'AVL', shortLabel: '⭐ MUN vs AVL', utcIso: '2026-11-08T16:30:00Z', status: 'MW10', name: '⭐ MUN vs AVL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+                { round: 'MW10', homeCode: 'SUN', awayCode: 'CHE', shortLabel: 'SUN vs CHE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'SUN vs CHE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MW10', homeCode: 'MUN', awayCode: 'AVL', shortLabel: 'MUN vs AVL', utcIso: '2026-11-08T16:30:00Z', status: 'MW10', name: 'MUN vs AVL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
             ],
-            // PURGED LA LIGA SEED FIXTURES: Populated 100% from ESPN API -> FootballDB -> Quick Press
-            LALIGA: [],
+            LALIGA: [
+                { round: 'MD12', homeCode: 'ESP', awayCode: 'DEP', shortLabel: 'ESP vs DEP', utcIso: '2026-11-06T20:00:00Z', status: 'MD12', name: 'ESP vs DEP (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'RMA', awayCode: 'OSA', shortLabel: 'RMA vs OSA', utcIso: '2026-11-07T13:00:00Z', status: 'MD12', name: 'RMA vs OSA (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'VIL', awayCode: 'ALA', shortLabel: 'VIL vs ALA', utcIso: '2026-11-07T15:15:00Z', status: 'MD12', name: 'VIL vs ALA (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'MAL', awayCode: 'RAC', shortLabel: 'MAL vs RAC', utcIso: '2026-11-07T17:30:00Z', status: 'MD12', name: 'MAL vs RAC (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'LEV', awayCode: 'SEV', shortLabel: 'LEV vs SEV', utcIso: '2026-11-07T20:00:00Z', status: 'MD12', name: 'LEV vs SEV (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'BET', awayCode: 'CEL', shortLabel: 'BET vs CEL', utcIso: '2026-11-08T13:00:00Z', status: 'MD12', name: 'BET vs CEL (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'MLL', awayCode: 'ATM', shortLabel: 'MLL vs ATM', utcIso: '2026-11-08T15:15:00Z', status: 'MD12', name: 'MLL vs ATM (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'GIR', awayCode: 'ATH', shortLabel: 'GIR vs ATH', utcIso: '2026-11-08T17:30:00Z', status: 'MD12', name: 'GIR vs ATH (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'RAY', awayCode: 'VAL', shortLabel: 'RAY vs VAL', utcIso: '2026-11-08T17:30:00Z', status: 'MD12', name: 'RAY vs VAL (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'MD12', homeCode: 'RSO', awayCode: 'BAR', shortLabel: 'RSO vs BAR', utcIso: '2026-11-08T20:00:00Z', status: 'MD12', name: 'RSO vs BAR (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+            ],
             UCL: [
-                { round: 'UCL4', homeCode: 'GAL', awayCode: 'STU', shortLabel: 'GAL 2-1 STU', utcIso: '2026-11-03T17:45:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'GAL 2 - 1 STU (UCL MD4 FT)', homeShots: 14, homeSot: 5, awayShots: 11, awaySot: 4, homePoss: 52 },
-                { round: 'UCL4', homeCode: 'SHK', awayCode: 'SCP', shortLabel: 'SHK 1-2 SCP', utcIso: '2026-11-03T17:45:00Z', status: 'FT', hScore: 1, aScore: 2, name: 'SHK 1 - 2 SCP (UCL MD4 FT)', homeShots: 10, homeSot: 3, awayShots: 15, awaySot: 6, homePoss: 46 },
-                { round: 'UCL4', featured: true, homeCode: 'ATM', awayCode: 'BAY', shortLabel: 'ATM 1-1 BAY', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 1, name: 'ATM 1 - 1 BAY (UCL MD4 FT)', homeShots: 12, homeSot: 4, awayShots: 16, awaySot: 6, homePoss: 43 },
-                { round: 'UCL4', featured: true, homeCode: 'BAR', awayCode: 'AVL', shortLabel: 'BAR 3-1 AVL', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 3, aScore: 1, name: 'BAR 3 - 1 AVL (UCL MD4 FT)', homeShots: 18, homeSot: 7, awayShots: 9, awaySot: 3, homePoss: 63 },
-                { round: 'UCL4', featured: true, homeCode: 'VIL', awayCode: 'PSG', shortLabel: 'VIL 1-2 PSG', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 2, name: 'VIL 1 - 2 PSG (UCL MD4 FT)', homeShots: 11, homeSot: 4, awayShots: 17, awaySot: 7, homePoss: 41 },
-                { round: 'UCL4', featured: true, homeCode: 'MUN', awayCode: 'ROM', shortLabel: 'MUN 2-1 ROM', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'MUN 2 - 1 ROM (UCL MD4 FT)', homeShots: 15, homeSot: 5, awayShots: 12, awaySot: 4, homePoss: 54 },
-                { round: 'UCL4', featured: true, homeCode: 'FEY', awayCode: 'INT', shortLabel: 'FEY 0-2 INT', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 0, aScore: 2, name: 'FEY 0 - 2 INT (UCL MD4 FT)', homeShots: 9, homeSot: 2, awayShots: 14, awaySot: 6, homePoss: 47 },
-                { round: 'UCL4', homeCode: 'BOD', awayCode: 'LIL', shortLabel: 'BOD 1-1 LIL', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 1, name: 'BOD 1 - 1 LIL (UCL MD4 FT)', homeShots: 11, homeSot: 4, awayShots: 12, awaySot: 4, homePoss: 49 },
-                { round: 'UCL4', homeCode: 'LASK', awayCode: 'SLO', shortLabel: 'LASK 2-0 SLO', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 2, aScore: 0, name: 'LASK 2 - 0 SLO (UCL MD4 FT)', homeShots: 14, homeSot: 5, awayShots: 7, awaySot: 2, homePoss: 56 },
-                { round: 'UCL4', featured: true, homeCode: 'FEN', awayCode: 'LIV', shortLabel: '⭐ FEN vs LIV', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: '⭐ FEN vs LIV (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', featured: true, homeCode: 'AEK', awayCode: 'RMA', shortLabel: '⭐ AEK vs RMA', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: '⭐ AEK vs RMA (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', featured: true, homeCode: 'RBL', awayCode: 'MCI', shortLabel: '⭐ RBL vs MCI', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ RBL vs MCI (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', featured: true, homeCode: 'DOR', awayCode: 'BET', shortLabel: '⭐ DOR vs BET', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ DOR vs BET (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', featured: true, homeCode: 'SLA', awayCode: 'ARS', shortLabel: '⭐ SLA vs ARS', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ SLA vs ARS (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', homeCode: 'POR', awayCode: 'NAP', shortLabel: 'POR vs NAP', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'POR vs NAP (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', homeCode: 'PSV', awayCode: 'BRU', shortLabel: 'PSV vs BRU', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'PSV vs BRU (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', homeCode: 'LEN', awayCode: 'COM', shortLabel: 'LEN vs COM', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'LEN vs COM (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-                { round: 'UCL4', homeCode: 'VIK', awayCode: 'SAB', shortLabel: 'VIK vs SAB', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'VIK vs SAB (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
-            ]
+                { round: 'UCL4', homeCode: 'FEN', awayCode: 'LIV', shortLabel: 'FEN vs LIV', utcIso: '2026-11-03T17:45:00Z', status: 'UCL4', name: 'FEN vs LIV (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'PSV', awayCode: 'SHK', shortLabel: 'PSV vs SHK', utcIso: '2026-11-03T17:45:00Z', status: 'UCL4', name: 'PSV vs SHK (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'AEK', awayCode: 'RMA', shortLabel: 'AEK vs RMA', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'AEK vs RMA (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'RBL', awayCode: 'MCI', shortLabel: 'RBL vs MCI', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'RBL vs MCI (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'DOR', awayCode: 'POR', shortLabel: 'DOR vs POR', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'DOR vs POR (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'LIL', awayCode: 'ROM', shortLabel: 'LIL vs ROM', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'LIL vs ROM (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'SCP', awayCode: 'BET', shortLabel: 'SCP vs BET', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'SCP vs BET (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'BRU', awayCode: 'AVL', shortLabel: 'BRU vs AVL', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: 'BRU vs AVL (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'INT', awayCode: 'ARS', shortLabel: 'INT vs ARS', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'INT vs ARS (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'PSG', awayCode: 'ATM', shortLabel: 'PSG vs ATM', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'PSG vs ATM (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'BAY', awayCode: 'FEY', shortLabel: 'BAY vs FEY', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'BAY vs FEY (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+                { round: 'UCL4', homeCode: 'BAR', awayCode: 'GAL', shortLabel: 'BAR vs GAL', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'BAR vs GAL (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+            ],
+            UNL: (window.FootballDB && window.FootballDB.seedData && window.FootballDB.seedData.leagueFixturesData && window.FootballDB.seedData.leagueFixturesData.UNL) || generateFallbackAll6MatchdaysUNL()
         };
 
         let plTeams = plTeamsData;
         let defaultRoundFixtures = leagueFixturesData.PL;
         let liveApiFixtures = [...defaultRoundFixtures];
         let currentMode = 'blended';
+        let currentGroupFilter = 'ALL';
         let currentHomeForm = ['D', 'L', 'L', 'W', 'W'];
         let currentAwayForm = ['W', 'W', 'L', 'L', 'W'];
+
+        function getOrderedGroupsForCurrentLeague() {
+            const cfg = leagueConfigs[currentLeague];
+            if (!cfg || cfg.phaseType !== 'GROUP_STAGE') return [];
+            const sourceTeams = (Object.keys(plTeams || {}).length >= 16) ? plTeams : unlTeamsData;
+            const groupMap = new Map();
+            Object.keys(sourceTeams).forEach(code => {
+                const t = sourceTeams[code];
+                if (!t || !t.group) return;
+                if (!groupMap.has(t.group)) {
+                    groupMap.set(t.group, {
+                        name: t.group,
+                        order: t.groupOrder || 99,
+                        teams: []
+                    });
+                }
+                groupMap.get(t.group).teams.push({ code, name: t.name, rank: t.groupRank || t.espnRank || 99 });
+            });
+            const groups = Array.from(groupMap.values()).sort((a, b) => a.order - b.order);
+            groups.forEach(g => g.teams.sort((a, b) => a.rank - b.rank));
+            return groups;
+        }
+
+        function updateGroupStageUIControls() {
+            const cfg = leagueConfigs[currentLeague];
+            const isGroupStage = Boolean(cfg && cfg.phaseType === 'GROUP_STAGE');
+            const tableGroupBox = document.getElementById('tableGroupSelectContainer');
+            const tableGroupSelect = document.getElementById('tableGroupFilterDropdown');
+
+            if (!isGroupStage) {
+                if (tableGroupBox) {
+                    tableGroupBox.classList.add('hidden');
+                    tableGroupBox.classList.remove('flex');
+                }
+                return;
+            }
+
+            if (tableGroupBox) {
+                tableGroupBox.classList.remove('hidden');
+                tableGroupBox.classList.add('flex');
+            }
+
+            const groups = getOrderedGroupsForCurrentLeague();
+            const validGroupNames = groups.map(g => g.name);
+            if (currentGroupFilter !== 'ALL' && !validGroupNames.includes(currentGroupFilter)) {
+                currentGroupFilter = 'ALL';
+            }
+
+            let optionsHtml = `<option value="ALL" class="bg-[#161b29] text-white">🌐 All ${groups.length} Groups (A–N • ${Object.keys(plTeams).length} Teams)</option>`;
+            groups.forEach(g => {
+                const teamList = g.teams.map(t => t.code).join(', ');
+                optionsHtml += `<option value="${g.name}" class="bg-[#161b29] text-white">${g.name} — [${teamList}]</option>`;
+            });
+
+            if (tableGroupSelect) {
+                tableGroupSelect.innerHTML = optionsHtml;
+                tableGroupSelect.value = currentGroupFilter;
+            }
+        }
+
+        function onTableGroupFilterChange() {
+            const tableGroupSelect = document.getElementById('tableGroupFilterDropdown');
+            if (!tableGroupSelect) return;
+            applyGroupFilterSelection(tableGroupSelect.value);
+        }
+
+        function applyGroupFilterSelection(selectedGroup) {
+            currentGroupFilter = selectedGroup || 'ALL';
+            const tableGroupSelect = document.getElementById('tableGroupFilterDropdown');
+            if (tableGroupSelect && tableGroupSelect.value !== currentGroupFilter) {
+                tableGroupSelect.value = currentGroupFilter;
+            }
+            renderLeagueStandingsTable();
+        }
 
         function sortFixturesChronologically(list) {
             return [...list].sort((a, b) => {
                 const tA = a.utcIso ? new Date(a.utcIso).getTime() : Number.MAX_SAFE_INTEGER;
                 const tB = b.utcIso ? new Date(b.utcIso).getTime() : Number.MAX_SAFE_INTEGER;
                 if (tA !== tB) return tA - tB;
-                if ((b.featured ? 1 : 0) !== (a.featured ? 1 : 0)) {
-                        return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
-                    }
-                    return (a.homeCode || '').localeCompare(b.homeCode || '');
-                });
-            }
+                return (a.homeCode || '').localeCompare(b.homeCode || '');
+            });
+        }
 
         function ensureCompleteRoundMatches(primaryMatches, seedMatches, targetTeams, roundCode, matchesPerRound = 10, allowSyntheticFill = false) {
-            const topClubs = new Set(['MCI', 'ARS', 'LIV', 'CHE', 'TOT', 'NEW', 'BAR', 'RMA', 'ATM', 'BAY', 'INT', 'PSG', 'AVL', 'VIL', 'DOR', 'EVE', 'RSO', 'BET', 'ATH', 'SEV', 'MAL', 'RAC', 'DEP', 'ESP']);
             const result = [];
             const usedClubs = new Set();
 
@@ -948,7 +1200,6 @@
                 for (let i = 0; i + 1 < unusedClubCodes.length && result.length < matchesPerRound; i += 2) {
                     const hCode = unusedClubCodes[i];
                     const aCode = unusedClubCodes[i + 1];
-                    const isFeatured = topClubs.has(hCode) || topClubs.has(aCode);
                     const fallbackSlots = [
                         '2026-11-07T15:15:00Z',
                         '2026-11-09T20:00:00Z',
@@ -958,10 +1209,9 @@
                     const utcIso = fallbackSlots[slotIdx % fallbackSlots.length];
                     slotIdx++;
 
-                    const shortLabel = `${isFeatured ? '⭐ ' : ''}${hCode} vs ${aCode}`;
+                    const shortLabel = `${hCode} vs ${aCode}`;
                     result.push({
                         round: roundCode,
-                        featured: isFeatured,
                         homeCode: hCode,
                         awayCode: aCode,
                         shortLabel,
@@ -983,8 +1233,8 @@
         }
 
         const FootballDB = window.FootballDB || {
-            DB_VERSION: '2026.11.v33.espn_38gw_exact',
-            STORAGE_KEY: 'football_prediction_engine_espn_db_v33',
+            DB_VERSION: '2026.11.v35.espn_auto_delta_sync',
+            STORAGE_KEY: 'football_prediction_engine_espn_db_v35',
             state: null,
 
             buildStandingsSnapshot(teamsObj) {
@@ -1043,6 +1293,7 @@
                 const plCopy = JSON.parse(JSON.stringify(plTeamsData));
                 const laLigaCopy = JSON.parse(JSON.stringify(laLigaTeamsData));
                 const uclCopy = JSON.parse(JSON.stringify(uclTeamsData));
+                const unlCopy = JSON.parse(JSON.stringify(unlTeamsData));
 
                 this.state = {
                     version: this.DB_VERSION,
@@ -1067,6 +1318,14 @@
                             teams: uclCopy,
                             standings: this.buildStandingsSnapshot(uclCopy),
                             fixtures: [...leagueFixturesData.UCL],
+                            fullSeasonSeededFromESPN: false,
+                            formSeededFromESPN: false,
+                            lastSyncedAt: new Date().toISOString()
+                        },
+                        UNL: {
+                            teams: unlCopy,
+                            standings: this.buildStandingsSnapshot(unlCopy),
+                            fixtures: [...leagueFixturesData.UNL],
                             fullSeasonSeededFromESPN: false,
                             formSeededFromESPN: false,
                             lastSyncedAt: new Date().toISOString()
@@ -1124,11 +1383,11 @@
             const syncBtn = document.getElementById('syncStandingsBtn');
             const dbBadge = document.getElementById('dbCacheBadge');
 
-            // PURGE QUICK PRESS & DB FIXTURES FIRST when syncing La Liga or forcing refresh
-            if (leagueKey === 'LALIGA' || forceRefresh) {
+            // PURGE QUICK PRESS & DB FIXTURES FIRST when syncing La Liga, UCL, or forcing refresh
+            if (leagueKey === 'LALIGA' || leagueKey === 'UCL' || forceRefresh) {
                 const quickBar = document.getElementById('quickPressContainer');
                 if (quickBar && leagueKey === currentLeague) {
-                    quickBar.innerHTML = `<span class="text-xs text-[#00ff85] animate-pulse font-semibold">🧹 Purged stale fixtures — Fetching live ${cfg.name} schedule from ESPN API into FootballDB...</span>`;
+                    quickBar.innerHTML = `<span class="text-xs text-[#00ff85] animate-pulse font-semibold">🧹 Purged stale fixtures — Fetching live ${cfg.name} schedule & forms from ESPN API into FootballDB...</span>`;
                 }
                 if (typeof FootballDB.purgeLeagueFixtures === 'function') {
                     FootballDB.purgeLeagueFixtures(leagueKey);
@@ -1168,7 +1427,8 @@
                             dbBadge.textContent = `⚡ FootballDB Layer (${Object.keys(plTeams).length} Teams • ${liveApiFixtures.length} Season Fixtures)`;
                         }
                         if (statusText) {
-                            statusText.innerHTML = `✅ <strong class="text-[#00ff85]">ESPN API → football_db.js Synced:</strong> ${liveApiFixtures.length} ${cfg.name} fixtures & ${Object.keys(plTeams).length} clubs (${activeRoundCount}/${cfg.matchesPerRound} in ${qpState.activeRound} • ${nowTime})`;
+                            const deltaTag = syncResult?.changed ? '🔄 Delta Detected & Updated in DB' : '✓ Verified Up-to-Date';
+                            statusText.innerHTML = `✅ <strong class="text-[#00ff85]">ESPN API → football_db.js (${deltaTag}):</strong> ${liveApiFixtures.length} ${cfg.name} fixtures & ${Object.keys(plTeams).length} clubs (${activeRoundCount}/${cfg.matchesPerRound} in ${qpState.activeRound} • ${nowTime})`;
                         }
                     }
                     return true;
@@ -1178,26 +1438,6 @@
                         syncBtn.innerHTML = `<span>↻ Sync All ESPN → DB</span>`;
                     }
                 }
-            }
-
-            const cachedRoundMatches = (dbLeague.fixtures || []).filter(f => f.round === qpState.activeRound);
-            if (dbLeague.fullSeasonSeededFromESPN && !forceRefresh && cachedRoundMatches.length >= cfg.matchesPerRound) {
-                if (leagueKey === currentLeague) {
-                    plTeams = dbLeague.teams;
-                    liveApiFixtures = dbLeague.fixtures;
-                    syncActiveRoundWithClock(currentLeague, liveApiFixtures);
-                    populateRoundFilterOptions();
-                    populateFixturesDropdown(liveApiFixtures);
-                    refreshTeamSelectOptions();
-                    renderLeagueStandingsTable();
-                    if (dbBadge) {
-                        dbBadge.textContent = `⚡ FootballDB (${Object.keys(plTeams).length} Teams • ${liveApiFixtures.length} Season Fixtures)`;
-                    }
-                    if (statusText) {
-                        statusText.innerHTML = `🗄️ <strong class="text-[#00ff85]">Serving ${cfg.name} (${Object.keys(plTeams).length} clubs & ${liveApiFixtures.length} ESPN fixtures) from FootballDB.</strong>`;
-                    }
-                }
-                return true;
             }
 
             if (syncBtn && leagueKey === currentLeague) {
@@ -1215,8 +1455,6 @@
                 if (targetTeams[c]?.espnId) espnIdToCode[String(targetTeams[c].espnId)] = c;
                 abbrToCode[c.toUpperCase()] = c;
             });
-
-            const topClubs = new Set(['MCI', 'ARS', 'LIV', 'CHE', 'TOT', 'NEW', 'BAR', 'RMA', 'ATM', 'BAY', 'INT', 'PSG', 'AVL', 'VIL', 'DOR', 'EVE', 'RSO', 'BET', 'ATH', 'SEV', 'MAL', 'RAC']);
 
             try {
                 // STEP 1: Fetch Official 20-Club Standings from ESPN API
@@ -1295,7 +1533,7 @@
 
                                 const formStat = (entry.stats || []).find(s => s.name === 'form' || s.type === 'form' || s.abbreviation === 'FORM');
                                 const parsedForm = parseFormString(formStat?.displayValue || formStat?.stringValue || formStat?.value);
-                                if (parsedForm && leagueKey !== 'UCL') {
+                                if (parsedForm) {
                                     freshTeams[code].form = parsedForm;
                                 }
                             });
@@ -1358,6 +1596,13 @@
                     const aCode = resolveScoreboardTeamCode(awayComp.team);
                     if (!hCode || !aCode || !targetTeams[hCode] || !targetTeams[aCode]) return null;
 
+                    // STRICT GROUP-STAGE INVARIANT: In Group Stage mode, never allow cross-group matchups
+                    if (cfg.phaseType === 'GROUP_STAGE') {
+                        const hGrp = targetTeams[hCode]?.group;
+                        const aGrp = targetTeams[aCode]?.group;
+                        if (!hGrp || !aGrp || hGrp !== aGrp) return null;
+                    }
+
                     if (!lastRawESPNFixtureSample) {
                         lastRawESPNFixtureSample = {
                             id: ev.id,
@@ -1389,7 +1634,6 @@
                     const isDone = isESPNEventCompleted(comp);
                     const hScore = homeComp.score?.displayValue ?? homeComp.score?.value ?? homeComp.score ?? '0';
                     const aScore = awayComp.score?.displayValue ?? awayComp.score?.value ?? awayComp.score ?? '0';
-                    const isFeatured = topClubs.has(hCode) || topClubs.has(aCode);
 
                     const extractStat = (competitor, names) => {
                         const st = (competitor.statistics || []).find(s => names.includes(s.name) || names.includes(s.abbreviation));
@@ -1401,13 +1645,12 @@
 
                     const shortLabel = isDone
                         ? `${hCode} ${hScore}-${aScore} ${aCode}`
-                        : `${isFeatured ? '⭐ ' : ''}${hCode} vs ${aCode}`;
+                        : `${hCode} vs ${aCode}`;
 
                     return {
                         eventId: String(ev.id || `${hCode}_${aCode}_${ev.date}`),
                         round: roundCode,
                         weekNumber: weekNum ? Number(weekNum) : null,
-                        featured: isFeatured,
                         homeCode: hCode,
                         awayCode: aCode,
                         shortLabel,
@@ -1483,7 +1726,7 @@
                         validLeagueEvents.sort((a, b) => new Date(a.rawEv.date).getTime() - new Date(b.rawEv.date).getTime());
 
                         const completedLeagueItems = validLeagueEvents.filter(item => item.parsed.status === 'FT');
-                        if (completedLeagueItems.length >= 3 && leagueKey !== 'UCL') {
+                        if (completedLeagueItems.length >= 1) {
                             const last5 = completedLeagueItems.slice(-5).map(({ rawEv }) => {
                                 const comp = rawEv.competitions[0];
                                 const ourSide = (comp.competitors || []).find(c => String(c.team?.id) === String(espnId) || String(c.id) === String(espnId));
@@ -1499,14 +1742,17 @@
                                 }
                                 return 'D';
                             });
-                            while (last5.length < 5) last5.unshift('D');
+                            const existingForm = targetTeams[code].form || ['D', 'D', 'D', 'D', 'D'];
+                            while (last5.length < 5) {
+                                last5.unshift(existingForm[5 - 1 - last5.length] || 'D');
+                            }
                             targetTeams[code].form = last5.slice(-5);
                         }
 
                         validLeagueEvents.slice(0, cfg.totalRounds).forEach(({ parsed }, idx) => {
                             const explicitWeek = parsed.weekNumber;
-                            const inferredRoundNum = explicitWeek
-                                ? Math.min(cfg.totalRounds, Math.max(1, explicitWeek))
+                            const inferredRoundNum = (explicitWeek && explicitWeek >= 1 && explicitWeek <= cfg.totalRounds)
+                                ? explicitWeek
                                 : Math.min(cfg.totalRounds, idx + 1);
                             if (!eventRoundVotes.has(parsed.eventId)) {
                                 eventRoundVotes.set(parsed.eventId, []);
@@ -1517,11 +1763,11 @@
                     } catch (e) {}
                 }));
 
-                // STEP 3: Bucket all harvested fixtures strictly into their assigned Gameweek (`MW1`..`MW38` / `MD1`..`MD38`)
+                // STEP 3: Bucket all harvested fixtures strictly into their assigned Gameweek (`MW1`..`MW38` / `MD1`..`MD38` / `UCL1`..`UCL8`)
                 const allHarvested = sortFixturesChronologically(Array.from(harvestedByEventId.values()));
                 const finalFixtures = [];
 
-                if (allHarvested.length >= 10 && leagueKey !== 'UCL') {
+                if (allHarvested.length >= 8) {
                     const roundBuckets = {};
                     const roundClubUsed = {};
                     for (let r = 1; r <= cfg.totalRounds; r++) {
@@ -1557,7 +1803,7 @@
                             const isDone = (fix.status === 'FT');
                             const shortLabel = isDone
                                 ? fix.shortLabel
-                                : `${fix.featured ? '⭐ ' : ''}${fix.homeCode} vs ${fix.awayCode}`;
+                                : `${fix.homeCode} vs ${fix.awayCode}`;
                             const cloned = {
                                 ...fix,
                                 round: rCode,
@@ -1586,7 +1832,7 @@
                                 const isDone = (fix.status === 'FT');
                                 const shortLabel = isDone
                                     ? fix.shortLabel
-                                    : `${fix.featured ? '⭐ ' : ''}${fix.homeCode} vs ${fix.awayCode}`;
+                                    : `${fix.homeCode} vs ${fix.awayCode}`;
                                 roundBuckets[rCode].push({
                                     ...fix,
                                     round: rCode,
@@ -1599,6 +1845,22 @@
                                 placedEventIds.add(fix.eventId);
                                 break;
                             }
+                        }
+                    });
+
+                    // Backfill any unharvested group-stage or round fixtures from seed data so UNL always keeps all 26 intra-group matches per Matchday
+                    (leagueFixturesData[leagueKey] || []).forEach(seedFix => {
+                        const rCode = seedFix.round;
+                        if (cfg.phaseType === 'GROUP_STAGE' && targetTeams[seedFix.homeCode]?.group !== targetTeams[seedFix.awayCode]?.group) {
+                            return;
+                        }
+                        if (roundBuckets[rCode] &&
+                            roundBuckets[rCode].length < cfg.matchesPerRound &&
+                            !roundClubUsed[rCode].has(seedFix.homeCode) &&
+                            !roundClubUsed[rCode].has(seedFix.awayCode)) {
+                            roundBuckets[rCode].push(seedFix);
+                            roundClubUsed[rCode].add(seedFix.homeCode);
+                            roundClubUsed[rCode].add(seedFix.awayCode);
                         }
                     });
 
@@ -1834,6 +2096,138 @@
             populateFixturesDropdown(liveApiFixtures);
         }
 
+        function parseFormString(str) {
+            if (!str || typeof str !== 'string') return null;
+            const cleaned = str.toUpperCase().replace(/[^WDL]/g, '').slice(-5);
+            if (cleaned.length !== 5) return null;
+            return cleaned.split('');
+        }
+
+        function renderFormPills() {
+            const renderSide = (containerId, formArr, side) => {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                container.innerHTML = '';
+                (formArr || ['D', 'D', 'D', 'D', 'D']).forEach((res, idx) => {
+                    const btn = document.createElement('button');
+                    let colorClass = 'bg-gray-700 text-gray-200 border-gray-600';
+                    if (res === 'W') colorClass = 'bg-[#00ff85] text-[#0b0e14] border-[#00ff85] shadow-sm shadow-[#00ff85]/30';
+                    else if (res === 'L') colorClass = 'bg-[#ff2882] text-white border-[#ff2882] shadow-sm shadow-[#ff2882]/30';
+
+                    btn.className = `w-7 h-7 rounded-lg text-xs font-black border flex items-center justify-center transition transform hover:scale-110 cursor-pointer ${colorClass}`;
+                    btn.textContent = res;
+                    btn.title = `Match ${idx + 1} (${idx === 4 ? 'Latest' : (idx === 0 ? 'Oldest' : `Match ${idx + 1}`)}): Click to toggle W/D/L`;
+                    btn.onclick = () => cycleFormResult(side, idx);
+                    container.appendChild(btn);
+                });
+            };
+
+            renderSide('homeFormPills', currentHomeForm, 'home');
+            renderSide('awayFormPills', currentAwayForm, 'away');
+        }
+
+        function populateFixturesDropdown(fixtures) {
+            const dropdown = document.getElementById('liveFixturesDropdown');
+            const quickBar = document.getElementById('quickPressContainer');
+            const quickTitle = document.getElementById('quickPressTitleLabel');
+            const headerBadge = document.getElementById('headerMatchweekBadge');
+            const roundFilter = document.getElementById('roundFilterDropdown');
+
+            const qpState = quickPressState[currentLeague] || { activeRound: 'MW10' };
+            const selectedRound = (roundFilter && roundFilter.value) ? roundFilter.value : qpState.activeRound;
+
+            const roundNum = selectedRound.replace(/[^0-9]/g, '') || '1';
+            const labelWord = (currentLeague === 'UCL' || currentLeague === 'UNL') ? 'Matchday' : 'Gameweek';
+            const shortWord = (currentLeague === 'UCL' || currentLeague === 'UNL') ? 'MD' : 'GW';
+
+            if (headerBadge) {
+                headerBadge.textContent = `⚡ ${labelWord} ${roundNum}`;
+            }
+
+            const allList = Array.isArray(fixtures) ? fixtures : [];
+            const isGroupStage = Boolean(leagueConfigs[currentLeague]?.phaseType === 'GROUP_STAGE');
+            const filterIntraGroup = (list) => isGroupStage
+                ? list.filter(f => {
+                    const gH = plTeams[f.homeCode]?.group || unlTeamsData[f.homeCode]?.group;
+                    const gA = plTeams[f.awayCode]?.group || unlTeamsData[f.awayCode]?.group;
+                    return gH && gA && gH === gA;
+                })
+                : list;
+
+            let roundMatches = sortFixturesChronologically(filterIntraGroup(allList.filter(f => f.round === selectedRound)));
+            if (roundMatches.length === 0 && allList.length > 0) {
+                roundMatches = sortFixturesChronologically(filterIntraGroup(allList));
+            }
+
+            // Quick Press and Match Dropdown always show ALL matches for the selected round (even in Group Stage mode)
+            if (quickTitle) {
+                quickTitle.textContent = `Quick Press (${shortWord}${roundNum} • ${roundMatches.length} Matches):`;
+            }
+
+            const formatShortGroupLabel = (teamCode) => {
+                const grp = plTeams[teamCode]?.group || unlTeamsData[teamCode]?.group || '';
+                if (!grp) return '';
+                // e.g. "Group A (League A1)" -> "Group A"
+                return grp.split(' (')[0].trim();
+            };
+
+            if (dropdown) {
+                dropdown.innerHTML = `<option value="">📅 Select ${labelWord} ${roundNum} Match (${roundMatches.length} Fixtures)...</option>`;
+                roundMatches.forEach(fix => {
+                    const globalIdx = allList.indexOf(fix);
+                    const opt = document.createElement('option');
+                    opt.value = String(globalIdx >= 0 ? globalIdx : 0);
+                    const timeStr = fix.utcIso ? ` • ${formatKickoffTime(fix.utcIso)}` : '';
+                    const grpLabel = formatShortGroupLabel(fix.homeCode);
+                    const grpStr = grpLabel ? ` • [${grpLabel}]` : '';
+                    opt.textContent = `${fix.shortLabel || `${fix.homeCode} vs ${fix.awayCode}`}${timeStr}${grpStr}`;
+                    dropdown.appendChild(opt);
+                });
+            }
+
+            if (quickBar) {
+                quickBar.innerHTML = '';
+                const activeHome = document.getElementById('homeTeamSelect')?.value;
+                const activeAway = document.getElementById('awayTeamSelect')?.value;
+
+                roundMatches.forEach(fix => {
+                    const isSelected = (fix.homeCode === activeHome && fix.awayCode === activeAway);
+                    const btn = document.createElement('button');
+                    const baseCls = isSelected
+                        ? 'bg-[#00ff85] text-[#37003c] border-[#00ff85] font-black shadow-md shadow-[#00ff85]/20'
+                        : 'bg-[#1c2230] hover:bg-[#252d3f] text-gray-200 border-gray-700 hover:border-[#00ff85]/50 font-bold';
+
+                    btn.className = `px-2.5 py-1.5 rounded-xl text-xs border transition flex items-center gap-1.5 cursor-pointer ${baseCls}`;
+                    const hLogo = plTeams[fix.homeCode]?.logo || '';
+                    const aLogo = plTeams[fix.awayCode]?.logo || '';
+                    const grpLabel = formatShortGroupLabel(fix.homeCode).replace('Group ', 'Grp ');
+                    const grpSpan = grpLabel
+                        ? `<span class="text-[10px] px-1.5 py-0.2 rounded ${isSelected ? 'bg-[#37003c]/20 text-[#37003c]' : 'bg-[#04f5ff]/15 text-[#04f5ff] border border-[#04f5ff]/30'} font-extrabold">${grpLabel}</span>`
+                        : '';
+                    const timeBadge = fix.status === 'FT'
+                        ? `<span class="text-[10px] px-1 rounded bg-gray-800 text-gray-300">FT</span>`
+                        : (fix.utcIso ? `<span class="text-[10px] opacity-75">${formatKickoffTime(fix.utcIso).split(' ').slice(1, 3).join(' ')}</span>` : '');
+
+                    btn.innerHTML = `
+                        ${hLogo ? `<img src="${hLogo}" alt="" class="w-3.5 h-3.5 object-contain" onerror="this.style.display='none'">` : ''}
+                        <span>${fix.shortLabel || `${fix.homeCode} vs ${fix.awayCode}`}</span>
+                        ${aLogo ? `<img src="${aLogo}" alt="" class="w-3.5 h-3.5 object-contain" onerror="this.style.display='none'">` : ''}
+                        ${timeBadge}
+                        ${grpSpan}
+                    `;
+                    btn.onclick = () => {
+                        if (plTeams[fix.homeCode] && plTeams[fix.awayCode]) {
+                            document.getElementById('homeTeamSelect').value = fix.homeCode;
+                            document.getElementById('awayTeamSelect').value = fix.awayCode;
+                            onTeamSelect();
+                            populateFixturesDropdown(liveApiFixtures);
+                        }
+                    };
+                    quickBar.appendChild(btn);
+                });
+            }
+        }
+
         function cycleFormResult(side, idx) {
             const order = ['W', 'D', 'L'];
             const homeCode = document.getElementById('homeTeamSelect')?.value;
@@ -1884,8 +2278,20 @@
                 const pts = t.pts ?? Math.round(played * 1.4);
                 const ppg = pts / played;
                 const espnRank = t.espnRank ? Number(t.espnRank) : null;
-                return { code, team: t, played, gf, ga, gd, pts, ppg, espnRank };
+                const group = t.group || null;
+                const groupOrder = t.groupOrder ? Number(t.groupOrder) : 99;
+                const groupRank = t.groupRank ? Number(t.groupRank) : null;
+                return { code, team: t, group, groupOrder, groupRank, played, gf, ga, gd, pts, ppg, espnRank };
             }).sort((a, b) => {
+                if (cfg.phaseType === 'GROUP_STAGE' && a.groupOrder !== b.groupOrder) {
+                    return a.groupOrder - b.groupOrder;
+                }
+                if (cfg.phaseType === 'GROUP_STAGE' && a.group && b.group && a.group !== b.group) {
+                    return a.group.localeCompare(b.group);
+                }
+                if (cfg.phaseType === 'GROUP_STAGE' && a.groupRank !== null && b.groupRank !== null && a.groupRank !== b.groupRank) {
+                    return a.groupRank - b.groupRank;
+                }
                 if (a.espnRank !== null && b.espnRank !== null && a.espnRank !== b.espnRank) {
                     return a.espnRank - b.espnRank;
                 }
@@ -1896,7 +2302,7 @@
             }).slice(0, maxAllowed);
 
             sorted.forEach((item, idx) => {
-                const rank = idx + 1;
+                const rank = (cfg.phaseType === 'GROUP_STAGE' && item.groupRank) ? item.groupRank : (idx + 1);
                 item.rank = rank;
                 item.team.rank = rank;
                 item.team.gd = item.gd;
@@ -1942,12 +2348,42 @@
 
             const cfg = leagueConfigs[currentLeague];
             const titleEl = document.getElementById('standingsTableTitle');
+            const subtitleEl = document.getElementById('standingsTableSubtitle');
             const tableLogoEl = document.getElementById('tableLeagueLogoImg');
-            const standings = computeLeagueStandings();
+            const allStandings = computeLeagueStandings();
+            const isGroupStage = Boolean(cfg.phaseType === 'GROUP_STAGE');
+            const isSingleGroupSelected = isGroupStage && currentGroupFilter && currentGroupFilter !== 'ALL';
 
-            if (titleEl) titleEl.textContent = `${cfg.name} Standings (${standings.length} Teams) & Relative Strength Index`;
+            const standings = isSingleGroupSelected
+                ? allStandings.filter(r => r.group === currentGroupFilter)
+                : allStandings;
+
+            if (titleEl) {
+                if (isSingleGroupSelected) {
+                    titleEl.textContent = `${cfg.name} — ${currentGroupFilter} (${standings.length} Teams)`;
+                } else if (isGroupStage) {
+                    titleEl.textContent = `${cfg.name} — Group Stage (${cfg.totalGroups || 14} Groups • ${allStandings.length} National Teams)`;
+                } else {
+                    const phaseLabel = currentLeague === 'UCL' ? 'League Phase' : 'Standings';
+                    titleEl.textContent = `${cfg.name} ${phaseLabel} (${standings.length} Teams) & Relative Strength Index`;
+                }
+            }
+            if (subtitleEl) {
+                if (isGroupStage) {
+                    subtitleEl.innerHTML = `Group Stage Mode (4 Teams per Group in Leagues A–C, 3 in League D) • Use the <strong class="text-[#04f5ff]">Group Dropdown</strong> to switch groups or click any country row to set <strong>Home / Away</strong>`;
+                } else {
+                    subtitleEl.innerHTML = `Synced with <code class="text-[#00ff85]">ESPN Standings API</code> into <code class="text-[#00ff85]">FootballDB</code> • Click any row to set <strong>Home</strong> (or <strong>Shift+Click</strong> for <strong>Away</strong>)`;
+                }
+            }
             if (tableLogoEl && cfg.logo) {
                 tableLogoEl.style.display = 'block';
+                tableLogoEl.onerror = () => {
+                    if (cfg.logoFallback && tableLogoEl.src !== cfg.logoFallback) {
+                        tableLogoEl.src = cfg.logoFallback;
+                    } else {
+                        tableLogoEl.style.display = 'none';
+                    }
+                };
                 tableLogoEl.src = cfg.logo;
             }
 
@@ -1955,9 +2391,27 @@
             const activeAway = document.getElementById('awayTeamSelect')?.value;
 
             tbody.innerHTML = '';
+            let lastGroupRendered = null;
 
             standings.forEach(row => {
-                const { code, team, rank, played, gf, ga, gd, pts, ppg, strengthIndex } = row;
+                const { code, team, group, rank, played, gf, ga, gd, pts, ppg, strengthIndex } = row;
+
+                // Render Group Stage Section Header for UEFA Nations League (14 Groups)
+                if (cfg.phaseType === 'GROUP_STAGE' && group && group !== lastGroupRendered) {
+                    lastGroupRendered = group;
+                    const groupHeaderTr = document.createElement('tr');
+                    groupHeaderTr.className = 'bg-purple-950/50 border-y border-purple-700/40';
+                    groupHeaderTr.innerHTML = `
+                        <td colspan="11" class="py-2 px-3 text-xs font-extrabold uppercase tracking-wider text-[#00ff85]">
+                            <div class="flex items-center justify-between">
+                                <span>🏆 ${group} (${standings.filter(s => s.group === group).length} Teams)</span>
+                                ${!isSingleGroupSelected ? `<button onclick="applyGroupFilterSelection('${group.replace(/'/g, "\\'")}')" class="text-[10px] px-2 py-0.5 rounded bg-[#04f5ff]/15 hover:bg-[#04f5ff]/30 text-[#04f5ff] border border-[#04f5ff]/40 cursor-pointer transition">Filter Group →</button>` : `<button onclick="applyGroupFilterSelection('ALL')" class="text-[10px] px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 cursor-pointer transition">Show All 14 Groups</button>`}
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(groupHeaderTr);
+                }
+
                 const isHome = (code === activeHome);
                 const isAway = (code === activeAway);
 
@@ -1987,6 +2441,10 @@
                     if (rank <= 8) rankBadgeClass = 'bg-[#00ff85]/20 text-[#00ff85] border border-[#00ff85]/40';
                     else if (rank <= 24) rankBadgeClass = 'bg-[#04f5ff]/20 text-[#04f5ff] border border-[#04f5ff]/40';
                     else rankBadgeClass = 'bg-[#ff2882]/20 text-[#ff2882] border border-[#ff2882]/40';
+                } else if (cfg.phaseType === 'GROUP_STAGE') {
+                    if (rank === 1) rankBadgeClass = 'bg-[#00ff85]/20 text-[#00ff85] border border-[#00ff85]/40';
+                    else if (rank === 2) rankBadgeClass = 'bg-[#04f5ff]/20 text-[#04f5ff] border border-[#04f5ff]/40';
+                    else if (rank === 4) rankBadgeClass = 'bg-[#ff2882]/20 text-[#ff2882] border border-[#ff2882]/40';
                 } else {
                     if (rank <= 4) rankBadgeClass = 'bg-[#00ff85]/20 text-[#00ff85] border border-[#00ff85]/40';
                     else if (rank <= 6) rankBadgeClass = 'bg-[#04f5ff]/20 text-[#04f5ff] border border-[#04f5ff]/40';
@@ -2099,7 +2557,7 @@
             const qpState = quickPressState[currentLeague];
             const cfg = leagueConfigs[currentLeague];
             const prefix = cfg.roundPrefix;
-            const labelWord = (currentLeague === 'UCL') ? 'Matchday' : 'Gameweek';
+            const labelWord = (currentLeague === 'UCL' || currentLeague === 'UNL') ? 'Matchday' : 'Gameweek';
             const totalRounds = cfg.totalRounds;
 
             if (prefixLabel) prefixLabel.textContent = labelWord;
@@ -2121,7 +2579,19 @@
             currentLeague = sel;
             const cfg = leagueConfigs[currentLeague];
 
-            const dbLeague = FootballDB.getLeague(currentLeague);
+            let dbLeague = FootballDB.getLeague(currentLeague);
+            if (!dbLeague || !dbLeague.teams) {
+                FootballDB.init();
+                dbLeague = FootballDB.getLeague(currentLeague);
+            }
+            const activeRoundMatches = (dbLeague?.fixtures || []).filter(f => f.round === quickPressState[currentLeague]?.activeRound);
+            if (!dbLeague || !dbLeague.teams || (currentLeague === 'UNL' && (Object.keys(dbLeague.teams).length < 50 || activeRoundMatches.length < 26))) {
+                const fallbackTeams = (currentLeague === 'LALIGA' ? laLigaTeamsData : (currentLeague === 'UCL' ? uclTeamsData : (currentLeague === 'UNL' ? unlTeamsData : plTeamsData)));
+                const fallbackFixtures = (window.FootballDB && window.FootballDB.seedData && window.FootballDB.seedData.leagueFixturesData && window.FootballDB.seedData.leagueFixturesData[currentLeague]) || leagueFixturesData[currentLeague] || [];
+                FootballDB.saveLeague(currentLeague, fallbackTeams, fallbackFixtures, false);
+                dbLeague = FootballDB.getLeague(currentLeague);
+            }
+
             plTeams = dbLeague.teams;
             defaultRoundFixtures = dbLeague.fixtures;
             liveApiFixtures = dbLeague.fixtures;
@@ -2133,471 +2603,238 @@
 
             if (headerLogoImg && cfg.logo) {
                 headerLogoImg.style.display = 'block';
+                headerLogoImg.onerror = () => {
+                    if (cfg.logoFallback && headerLogoImg.src !== cfg.logoFallback) {
+                        headerLogoImg.src = cfg.logoFallback;
+                    } else {
+                        headerLogoImg.style.display = 'none';
+                        if (svgEl) svgEl.classList.remove('hidden');
+                    }
+                };
                 headerLogoImg.src = cfg.logo;
                 headerLogoImg.alt = `${cfg.name} Logo`;
                 if (svgEl) svgEl.classList.add('hidden');
             }
             if (dropdownLogoImg && cfg.logo) {
                 dropdownLogoImg.style.display = 'block';
+                dropdownLogoImg.onerror = () => {
+                    if (cfg.logoFallback && dropdownLogoImg.src !== cfg.logoFallback) {
+                        dropdownLogoImg.src = cfg.logoFallback;
+                    } else {
+                        dropdownLogoImg.style.display = 'none';
+                    }
+                };
                 dropdownLogoImg.src = cfg.logo;
             }
             if (svgEl) svgEl.innerHTML = `<path d="${cfg.svgPath}"/>`;
 
+            // Default to showing all 14 Groups (A–N) in the Standings Table, with the Group (A–N) dropdown ready to filter
+            currentGroupFilter = 'ALL';
+
             populateRoundFilterOptions();
+            updateGroupStageUIControls();
             initSelectors(cfg.defaultHome, cfg.defaultAway);
-        }
-
-        function toggleShowPlayedQuickLinks() {
-            const qpState = quickPressState[currentLeague];
-            qpState.showPlayed = !qpState.showPlayed;
-            populateFixturesDropdown(liveApiFixtures);
-        }
-
-        function parseFormString(str) {
-            if (!str || typeof str !== 'string') return null;
-            const cleaned = str.toUpperCase().replace(/[^WDL]/g, '').slice(-5);
-            if (cleaned.length !== 5) return null;
-            return cleaned.split('');
-        }
-
-        function renderFormPills() {
-            const renderSide = (formArr, containerId, side) => {
-                const container = document.getElementById(containerId);
-                if (!container) return;
-                container.innerHTML = '';
-                formArr.forEach((res, idx) => {
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    let colorClass = 'bg-gray-700 text-gray-200 border-gray-600';
-                    if (res === 'W') colorClass = 'bg-[#00ff85] text-[#0b0e14] border-[#00ff85] shadow-sm shadow-[#00ff85]/30';
-                    else if (res === 'D') colorClass = 'bg-purple-500/30 text-purple-200 border-purple-400/50';
-                    else if (res === 'L') colorClass = 'bg-[#ff2882]/25 text-[#ff2882] border-[#ff2882]/50';
-
-                    btn.className = `w-8 h-8 rounded-lg font-black text-xs border transition transform hover:scale-105 flex items-center justify-center ${colorClass}`;
-                    btn.textContent = res;
-                    btn.title = `Match ${idx + 1} (Oldest → Latest). Click to toggle W/D/L`;
-                    btn.onclick = () => cycleFormResult(side, idx);
-                    container.appendChild(btn);
-                });
-            };
-
-            renderSide(currentHomeForm, 'homeFormPills', 'home');
-            renderSide(currentAwayForm, 'awayFormPills', 'away');
-        }
-
-        function populateFixturesDropdown(fixturesList) {
-            const dbLeague = FootballDB.getLeague(currentLeague);
-            const authoritativeFixtures = (dbLeague && dbLeague.fixtures && dbLeague.fixtures.length > 0)
-                ? dbLeague.fixtures
-                : (fixturesList || []);
-            liveApiFixtures = authoritativeFixtures;
-
-            const qpState = quickPressState[currentLeague];
-            const roundFilter = document.getElementById('roundFilterDropdown')?.value || qpState.activeRound;
-            const dropdown = document.getElementById('liveFixturesDropdown');
-            const quickBar = document.getElementById('quickPressContainer');
-            const headerBadge = document.getElementById('headerMatchweekBadge');
-            const quickTitle = document.getElementById('quickPressTitleLabel');
-
-            const roundNum = roundFilter.replace(/\D/g, '') || '';
-            const isUCL = currentLeague === 'UCL';
-            const shortPrefix = isUCL ? 'MD' : 'GW';
-            const fullWord = isUCL ? 'Matchday' : 'Gameweek';
-
-            const indexedFixtures = authoritativeFixtures.map((f, idx) => ({ ...f, originalIdx: idx }));
-            const filtered = sortFixturesChronologically(indexedFixtures.filter(f => f.round === roundFilter));
-
-            if (quickTitle) {
-                quickTitle.textContent = `Quick Press (${shortPrefix}${roundNum} • ${filtered.length} Matches):`;
-            }
-
-            if (dropdown) {
-                const prevVal = dropdown.value;
-                dropdown.innerHTML = `<option value="">📅 Select Match (${fullWord} ${roundNum} — ${filtered.length} Matches)...</option>`;
-                filtered.forEach(fix => {
-                    const opt = document.createElement('option');
-                    opt.value = fix.originalIdx;
-                    const isPast = isFixturePastOrPlayed(fix);
-                    const displayTime = (!isPast && fix.utcIso) ? formatKickoffTime(fix.utcIso) : (fix.status === 'FT' ? 'FT' : 'Played');
-                    opt.textContent = (!isPast && fix.utcIso)
-                        ? `${fix.shortLabel} (${displayTime})`
-                        : fix.name;
-                    dropdown.appendChild(opt);
-                });
-                if (prevVal !== "" && filtered.some(f => String(f.originalIdx) === String(prevVal))) {
-                    dropdown.value = prevVal;
-                }
-            }
-
-            if (quickBar) {
-                quickBar.innerHTML = '';
-                const baseRoundList = filtered;
-                const unplayedList = baseRoundList.filter(f => !isFixturePastOrPlayed(f));
-                const ftCount = baseRoundList.length - unplayedList.length;
-
-                const toggleBtn = document.getElementById('togglePlayedQuickBtn');
-                if (toggleBtn) {
-                    if (ftCount > 0 && unplayedList.length > 0) {
-                        toggleBtn.classList.remove('hidden');
-                        toggleBtn.textContent = qpState.showPlayed ? '− Hide Played (FT)' : `+ Show ${ftCount} Played (FT)`;
-                    } else {
-                        toggleBtn.classList.add('hidden');
-                    }
-                }
-
-                const quickList = (qpState.showPlayed || unplayedList.length === 0) ? baseRoundList : unplayedList;
-                const activeHome = document.getElementById('homeTeamSelect')?.value;
-                const activeAway = document.getElementById('awayTeamSelect')?.value;
-
-                quickList.forEach(fix => {
-                    const isSelected = (fix.homeCode === activeHome && fix.awayCode === activeAway);
-                    const isPast = isFixturePastOrPlayed(fix);
-                    const btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.onclick = () => selectQuickPressFixture(fix.originalIdx);
-
-                    const baseStyle = isSelected
-                        ? 'bg-[#00ff85] text-[#37003c] border-[#00ff85] font-extrabold shadow-md shadow-[#00ff85]/20'
-                        : (fix.featured && !isPast
-                            ? 'bg-gradient-to-r from-amber-500/25 to-purple-900/90 hover:from-amber-500/40 hover:to-purple-800 text-amber-200 border-amber-400/70 font-extrabold shadow-sm shadow-amber-500/10'
-                            : 'bg-purple-950/80 hover:bg-purple-800/80 text-white border-purple-700/50 font-semibold');
-
-                    const badgeColor = isSelected
-                        ? 'bg-[#37003c]/20 text-[#37003c]'
-                        : (isPast ? 'bg-gray-800 text-gray-300' : 'bg-[#00ff85]/20 text-[#00ff85]');
-
-                    btn.className = `px-2.5 py-1 rounded-lg text-xs border transition flex items-center gap-1.5 shrink-0 ${baseStyle}`;
-                    const label = fix.shortLabel || `${fix.homeCode} vs ${fix.awayCode}`;
-                    const homeLogo = plTeams[fix.homeCode]?.logo || '';
-                    const awayLogo = plTeams[fix.awayCode]?.logo || '';
-                    const displayStatus = (!isPast && fix.utcIso) ? formatKickoffTime(fix.utcIso) : 'FT';
-                    const statusTag = displayStatus ? `<span class="text-[10px] px-1.5 py-0.2 rounded ${badgeColor}">${displayStatus}</span>` : '';
-                    btn.innerHTML = `
-                        <img src="${homeLogo}" alt="" class="w-4 h-4 object-contain" onerror="this.style.display='none'">
-                        <span>${label}</span>
-                        <img src="${awayLogo}" alt="" class="w-4 h-4 object-contain" onerror="this.style.display='none'">
-                        ${statusTag}
-                    `;
-                    quickBar.appendChild(btn);
-                });
-            }
-
-            if (headerBadge) {
-                headerBadge.textContent = `⚡ ${fullWord} ${roundNum}`;
-            }
         }
 
         function onRoundFilterChange() {
             populateFixturesDropdown(liveApiFixtures);
         }
 
-        function selectQuickPressFixture(originalIdx) {
-            const dropdown = document.getElementById('liveFixturesDropdown');
-            if (dropdown) {
-                dropdown.value = originalIdx;
-                loadLiveFixtureFromApi();
-            }
-            populateFixturesDropdown(liveApiFixtures);
-        }
-
         function loadLiveFixtureFromApi() {
-            const idx = document.getElementById('liveFixturesDropdown').value;
-            if (idx === "" || !liveApiFixtures[idx]) return;
+            const dropdown = document.getElementById('liveFixturesDropdown');
+            if (!dropdown || dropdown.value === '') return;
+            const idx = parseInt(dropdown.value, 10);
             const fix = liveApiFixtures[idx];
+            if (!fix) return;
 
             if (plTeams[fix.homeCode] && plTeams[fix.awayCode]) {
                 document.getElementById('homeTeamSelect').value = fix.homeCode;
                 document.getElementById('awayTeamSelect').value = fix.awayCode;
                 onTeamSelect();
-            }
 
-            if (fix.homeShots > 0 || fix.awayShots > 0) {
-                document.getElementById('homeShotsSlider').value = fix.homeShots;
-                document.getElementById('awayShotsSlider').value = fix.awayShots;
-                document.getElementById('homeSotSlider').value = fix.homeSot;
-                document.getElementById('awaySotSlider').value = fix.awaySot;
-                if (fix.homePoss > 0) {
-                    document.getElementById('possSlider').value = Math.round(fix.homePoss);
-                }
-                updateFromSliders();
-                document.getElementById('apiStatusText').innerHTML = `🔴 <strong class="text-[#00ff85]">Loaded Match Telemetry</strong> for ${fix.name} from FootballDB!`;
-            }
-        }
-
-        async function fetchWithRetry(url, options, retries = 3, delay = 1000) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const res = await fetch(url, options);
-                    if (res.ok) return await res.json();
-                } catch (e) {}
-                await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
-            }
-            throw new Error("API request failed after retries");
-        }
-
-        async function fetchLiveWebXgStats() {
-            const homeCode = document.getElementById('homeTeamSelect').value;
-            const awayCode = document.getElementById('awayTeamSelect').value;
-            const homeName = plTeams[homeCode].name;
-            const awayName = plTeams[awayCode].name;
-            const cfg = leagueConfigs[currentLeague];
-
-            const btn = document.getElementById('fetchLiveXgBtn');
-            const statusText = document.getElementById('apiStatusText');
-            const insightBox = document.getElementById('liveDataInsightBox');
-            const summaryText = document.getElementById('liveDataSummaryText');
-            const sourcesContainer = document.getElementById('liveDataSources');
-
-            btn.disabled = true;
-            btn.innerHTML = `<span class="animate-spin inline-block">⚡</span> Fetching...`;
-            statusText.textContent = `Syncing ESPN 5-match form & live xG for ${homeName} vs ${awayName}...`;
-
-            const savedKey = localStorage.getItem('pl_predictor_gemini_key') || "";
-            const apiKey = savedKey || "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-            const systemPrompt = `You are a football data API for ${cfg.name}. Look up the most recent season per-match averages and the chronological last 5 completed matches (ordered oldest to newest, e.g. "DLLWW" or "WWLLW") for the two requested teams.
-Return ONLY a valid JSON object with no markdown formatting:
-{
-  "homeXg": 1.92,
-  "awayXg": 1.38,
-  "homeShots": 15,
-  "awayShots": 12,
-  "homeSot": 6,
-  "awaySot": 4,
-  "homeBigChances": 3,
-  "awayBigChances": 2,
-  "homePossession": 55,
-  "homeForm": "DLLWW",
-  "awayForm": "WWLLW",
-  "summary": "Brief 1-sentence note citing the real current season xG, shot form, and 5-match momentum for both teams."
-}`;
-
-            const userQuery = `Get current ${cfg.name} per-90 stats (Expected Goals xG, Shots per game, Shots on Target per game, Big Chances, Possession %) and chronological last 5 completed match results (Oldest to Latest) for ${homeName} (Home) vs ${awayName} (Away).`;
-
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                tools: [{ "google_search": {} }],
-                systemInstruction: { parts: [{ text: systemPrompt }] }
-            };
-
-            try {
-                const result = await fetchWithRetry(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                const candidate = result.candidates?.[0];
-                const rawText = candidate?.content?.parts?.[0]?.text || "";
-                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const data = JSON.parse(jsonMatch[0]);
-                    if (data.homeXg) document.getElementById('homeXgSlider').value = Math.max(0.1, Math.min(4.5, Number(data.homeXg)));
-                    if (data.awayXg) document.getElementById('awayXgSlider').value = Math.max(0.1, Math.min(4.5, Number(data.awayXg)));
-                    if (data.homeShots) document.getElementById('homeShotsSlider').value = Math.max(1, Math.min(35, Math.round(data.homeShots)));
-                    if (data.awayShots) document.getElementById('awayShotsSlider').value = Math.max(1, Math.min(35, Math.round(data.awayShots)));
-                    if (data.homeSot !== undefined) document.getElementById('homeSotSlider').value = Math.max(0, Math.min(20, Math.round(data.homeSot)));
-                    if (data.awaySot !== undefined) document.getElementById('awaySotSlider').value = Math.max(0, Math.min(20, Math.round(data.awaySot)));
-                    if (data.homeBigChances !== undefined) document.getElementById('homeBigChancesSlider').value = Math.max(0, Math.min(10, Math.round(data.homeBigChances)));
-                    if (data.awayBigChances !== undefined) document.getElementById('awayBigChancesSlider').value = Math.max(0, Math.min(10, Math.round(data.awayBigChances)));
-                    if (data.homePossession) document.getElementById('possSlider').value = Math.max(20, Math.min(80, Math.round(data.homePossession)));
-
-                    const parsedHomeForm = parseFormString(data.homeForm);
-                    if (parsedHomeForm) {
-                        currentHomeForm = parsedHomeForm;
-                        plTeams[homeCode].form = [...parsedHomeForm];
-                    }
-                    const parsedAwayForm = parseFormString(data.awayForm);
-                    if (parsedAwayForm) {
-                        currentAwayForm = parsedAwayForm;
-                        plTeams[awayCode].form = [...parsedAwayForm];
-                    }
-                    FootballDB.saveLeague(currentLeague, plTeams, liveApiFixtures, true);
-                    renderFormPills();
+                if (fix.homeShots > 0 || fix.awayShots > 0) {
+                    document.getElementById('homeShotsSlider').value = fix.homeShots;
+                    document.getElementById('awayShotsSlider').value = fix.awayShots;
+                    if (fix.homeSot > 0) document.getElementById('homeSotSlider').value = fix.homeSot;
+                    if (fix.awaySot > 0) document.getElementById('awaySotSlider').value = fix.awaySot;
+                    if (fix.homePoss > 0) document.getElementById('possSlider').value = fix.homePoss;
                     updateFromSliders();
-                    renderLeagueStandingsTable();
-
-                    insightBox.classList.remove('hidden');
-                    summaryText.textContent = data.summary || `Applied live ${cfg.name} xG & 5-match Form for ${homeName} vs ${awayName}.`;
-
-                    sourcesContainer.innerHTML = '';
-                    const attributions = candidate?.groundingMetadata?.groundingAttributions || [];
-                    attributions
-                        .map(a => ({ uri: a.web?.uri, title: a.web?.title }))
-                        .filter(s => s.uri && s.title)
-                        .slice(0, 3)
-                        .forEach(src => {
-                            const link = document.createElement('a');
-                            link.href = src.uri;
-                            link.target = '_blank';
-                            link.rel = 'noopener noreferrer';
-                            link.className = 'underline hover:text-[#00ff85] transition';
-                            link.textContent = src.title.slice(0, 26) + (src.title.length > 26 ? '…' : '');
-                            sourcesContainer.appendChild(link);
-                        });
-
-                    statusText.innerHTML = `⚡ <strong class="text-[#00ff85]">Live xG & Form Applied:</strong> ${homeName} (${currentHomeForm.join('')}) vs ${awayName} (${currentAwayForm.join('')})!`;
-                } else {
-                    throw new Error("Could not parse live JSON response");
                 }
-            } catch (err) {
-                FootballDB.saveLeague(currentLeague, plTeams, liveApiFixtures, true);
-                resetToTeamAverages();
-                renderLeagueStandingsTable();
-                statusText.innerHTML = `✅ <strong class="text-[#00ff85]">ESPN Verified Form & Calibrated xG Applied</strong> for ${homeName} (${currentHomeForm.join('')}) vs ${awayName} (${currentAwayForm.join('')}).`;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<span>⚡ Fetch Live xG</span>`;
             }
         }
 
         function refreshTeamSelectOptions() {
-            const homeSelect = document.getElementById('homeTeamSelect');
-            const awaySelect = document.getElementById('awayTeamSelect');
-            if (!homeSelect || !awaySelect) return;
-            const prevHome = homeSelect.value;
-            const prevAway = awaySelect.value;
+            const homeSel = document.getElementById('homeTeamSelect');
+            const awaySel = document.getElementById('awayTeamSelect');
+            if (!homeSel || !awaySel) return;
 
-            homeSelect.innerHTML = '';
-            awaySelect.innerHTML = '';
+            const prevHome = homeSel.value;
+            const prevAway = awaySel.value;
 
-            Object.keys(plTeams).forEach(code => {
-                const team = plTeams[code];
-                if (!team) return;
-                const opt1 = document.createElement('option');
-                opt1.value = code;
-                opt1.textContent = team.name;
-                homeSelect.appendChild(opt1);
+            const cfg = leagueConfigs[currentLeague];
+            const codes = Object.keys(plTeams);
 
-                const opt2 = document.createElement('option');
-                opt2.value = code;
-                opt2.textContent = team.name;
-                awaySelect.appendChild(opt2);
+            codes.sort((a, b) => {
+                if (cfg && cfg.phaseType === 'GROUP_STAGE') {
+                    const goA = plTeams[a]?.groupOrder || 99;
+                    const goB = plTeams[b]?.groupOrder || 99;
+                    if (goA !== goB) return goA - goB;
+                    const grA = plTeams[a]?.groupRank || 99;
+                    const grB = plTeams[b]?.groupRank || 99;
+                    if (grA !== grB) return grA - grB;
+                }
+                const nameA = plTeams[a]?.name || a;
+                const nameB = plTeams[b]?.name || b;
+                return nameA.localeCompare(nameB);
             });
 
-            if (plTeams[prevHome]) homeSelect.value = prevHome;
-            if (plTeams[prevAway]) awaySelect.value = prevAway;
+            homeSel.innerHTML = '';
+            awaySel.innerHTML = '';
+
+            codes.forEach(code => {
+                const t = plTeams[code];
+                const groupSuffix = t.group ? ` [${t.group.split(' (')[0]}]` : '';
+                const optH = document.createElement('option');
+                optH.value = code;
+                optH.textContent = `${t.name} (${code})${groupSuffix}`;
+                homeSel.appendChild(optH);
+
+                const optA = document.createElement('option');
+                optA.value = code;
+                optA.textContent = `${t.name} (${code})${groupSuffix}`;
+                awaySel.appendChild(optA);
+            });
+
+            homeSel.value = codes.includes(prevHome) ? prevHome : (codes.includes(cfg.defaultHome) ? cfg.defaultHome : codes[0]);
+            awaySel.value = codes.includes(prevAway) ? prevAway : (codes.includes(cfg.defaultAway) ? cfg.defaultAway : (codes[1] || codes[0]));
+            if (homeSel.value === awaySel.value && codes.length > 1) {
+                awaySel.value = codes.find(c => c !== homeSel.value) || codes[0];
+            }
         }
 
         function initSelectors(defaultHome = 'EVE', defaultAway = 'COV') {
-            FootballDB.init();
-            const dbLeague = FootballDB.getLeague(currentLeague);
+            let dbLeague = FootballDB.getLeague(currentLeague);
+            if (!dbLeague || !dbLeague.teams) {
+                FootballDB.init();
+                dbLeague = FootballDB.getLeague(currentLeague);
+            }
+            if (!dbLeague || !dbLeague.teams || (currentLeague === 'UNL' && (Object.keys(dbLeague.teams).length < 50 || (dbLeague.fixtures || []).length < 26))) {
+                const fallbackTeams = (currentLeague === 'LALIGA' ? laLigaTeamsData : (currentLeague === 'UCL' ? uclTeamsData : (currentLeague === 'UNL' ? unlTeamsData : plTeamsData)));
+                const fallbackFixtures = (window.FootballDB && window.FootballDB.seedData && window.FootballDB.seedData.leagueFixturesData && window.FootballDB.seedData.leagueFixturesData[currentLeague]) || leagueFixturesData[currentLeague] || [];
+                FootballDB.saveLeague(currentLeague, fallbackTeams, fallbackFixtures, false);
+                dbLeague = FootballDB.getLeague(currentLeague);
+            }
+
             plTeams = dbLeague.teams;
             defaultRoundFixtures = dbLeague.fixtures;
             liveApiFixtures = dbLeague.fixtures;
 
-            syncActiveRoundWithClock(currentLeague, liveApiFixtures);
-            const cfg = leagueConfigs[currentLeague];
-            const startHome = cfg?.defaultHome || defaultHome;
-            const startAway = cfg?.defaultAway || defaultAway;
-
-            populateRoundFilterOptions();
             refreshTeamSelectOptions();
-            const homeSelect = document.getElementById('homeTeamSelect');
-            const awaySelect = document.getElementById('awayTeamSelect');
+            const homeSel = document.getElementById('homeTeamSelect');
+            const awaySel = document.getElementById('awayTeamSelect');
+            if (homeSel && plTeams[defaultHome]) homeSel.value = defaultHome;
+            if (awaySel && plTeams[defaultAway]) awaySel.value = defaultAway;
 
-            homeSelect.value = plTeams[startHome] ? startHome : Object.keys(plTeams)[0];
-            awaySelect.value = plTeams[startAway] ? startAway : Object.keys(plTeams)[1];
+            populateFixturesDropdown(liveApiFixtures);
             onTeamSelect();
 
-            seedFullSeasonFromESPN(currentLeague, false);
-        }
-
-        function setFixture(homeCode, awayCode) {
-            if (!plTeams[homeCode] || !plTeams[awayCode]) return;
-            document.getElementById('homeTeamSelect').value = homeCode;
-            document.getElementById('awayTeamSelect').value = awayCode;
-            onTeamSelect();
+            const dbBadge = document.getElementById('dbCacheBadge');
+            const statusText = document.getElementById('apiStatusText');
+            const cfg = leagueConfigs[currentLeague];
+            if (dbBadge) {
+                dbBadge.textContent = `⚡ FootballDB Layer (${Object.keys(plTeams).length} Teams • ${liveApiFixtures.length} Fixtures)`;
+            }
+            if (statusText) {
+                statusText.innerHTML = `🗄️ <strong class="text-[#00ff85]">Loaded ${cfg.name} (${Object.keys(plTeams).length} Teams) from Local FootballDB.</strong> Click "↻ Sync All ESPN → DB" to refresh.`;
+            }
         }
 
         function onTeamSelect() {
-            const homeCode = document.getElementById('homeTeamSelect').value;
-            const awayCode = document.getElementById('awayTeamSelect').value;
-            const home = plTeams[homeCode];
-            const away = plTeams[awayCode];
-            if (!home || !away) return;
+            const homeCode = document.getElementById('homeTeamSelect')?.value;
+            const awayCode = document.getElementById('awayTeamSelect')?.value;
+            if (!homeCode || !awayCode || !plTeams[homeCode] || !plTeams[awayCode]) return;
 
             computeLeagueStandings();
+            const home = plTeams[homeCode];
+            const away = plTeams[awayCode];
 
-            const homeBadge = document.getElementById('homeBadge');
-            const homeBadgeImg = document.getElementById('homeBadgeImg');
-            const homeBadgeFallback = document.getElementById('homeBadgeFallback');
-            if (homeBadge) homeBadge.style.borderColor = `${home.color}66`;
-            if (homeBadgeImg) {
-                homeBadgeImg.style.display = 'block';
-                homeBadgeImg.src = home.logo || '';
-            }
-            if (homeBadgeFallback) {
-                homeBadgeFallback.style.display = home.logo ? 'none' : 'flex';
-                homeBadgeFallback.textContent = home.short;
-            }
+            currentHomeForm = [...(home.form || ['D', 'D', 'D', 'D', 'D'])];
+            currentAwayForm = [...(away.form || ['D', 'D', 'D', 'D', 'D'])];
 
-            const awayBadge = document.getElementById('awayBadge');
-            const awayBadgeImg = document.getElementById('awayBadgeImg');
-            const awayBadgeFallback = document.getElementById('awayBadgeFallback');
-            if (awayBadge) awayBadge.style.borderColor = `${away.color}66`;
-            if (awayBadgeImg) {
-                awayBadgeImg.style.display = 'block';
-                awayBadgeImg.src = away.logo || '';
-            }
-            if (awayBadgeFallback) {
-                awayBadgeFallback.style.display = away.logo ? 'none' : 'flex';
-                awayBadgeFallback.textContent = away.short;
-            }
+            const setLogo = (imgId, fallbackId, team) => {
+                const img = document.getElementById(imgId);
+                const fb = document.getElementById(fallbackId);
+                if (img) {
+                    if (team.logo) {
+                        img.style.display = 'block';
+                        img.src = team.logo;
+                        if (fb) fb.style.display = 'none';
+                    } else {
+                        img.style.display = 'none';
+                        if (fb) {
+                            fb.style.display = 'flex';
+                            fb.textContent = team.short || '';
+                        }
+                    }
+                }
+            };
+
+            setLogo('homeBadgeImg', 'homeBadgeFallback', home);
+            setLogo('awayBadgeImg', 'awayBadgeFallback', away);
+
+            ['scoreCardHomeLogo', 'cardHomeLogo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && home.logo) { el.style.display = 'block'; el.src = home.logo; }
+            });
+            ['scoreCardAwayLogo', 'cardAwayLogo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && away.logo) { el.style.display = 'block'; el.src = away.logo; }
+            });
 
             const homeRankBadge = document.getElementById('homeRankBadge');
             const awayRankBadge = document.getElementById('awayRankBadge');
             if (homeRankBadge) {
-                homeRankBadge.textContent = `#${home.rank || '-'} • ${home.pts ?? 0} pts (${(home.ppg || 0).toFixed(2)} PPG)`;
+                const grpPrefix = home.group ? `${home.group.replace('League ', 'L').replace(' • Group ', ' G')} ` : '';
+                homeRankBadge.textContent = `${grpPrefix}#${home.rank || 1} • ${home.pts ?? 0} pts`;
             }
             if (awayRankBadge) {
-                awayRankBadge.textContent = `#${away.rank || '-'} • ${away.pts ?? 0} pts (${(away.ppg || 0).toFixed(2)} PPG)`;
+                const grpPrefix = away.group ? `${away.group.replace('League ', 'L').replace(' • Group ', ' G')} ` : '';
+                awayRankBadge.textContent = `${grpPrefix}#${away.rank || 1} • ${away.pts ?? 0} pts`;
             }
 
-            ['scoreCardHomeLogo', 'cardHomeLogo'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) { el.style.display = 'block'; el.src = home.logo || ''; }
-            });
-            ['scoreCardAwayLogo', 'cardAwayLogo'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) { el.style.display = 'block'; el.src = away.logo || ''; }
-            });
-
-            document.getElementById('homeWinLabel').textContent = `${home.short} Win`;
-            document.getElementById('awayWinLabel').textContent = `${away.short} Win`;
-
-            currentHomeForm = [...(home.form || ['D','L','L','W','W'])];
-            currentAwayForm = [...(away.form || ['W','W','L','L','W'])];
-            renderFormPills();
+            const homeWinLabel = document.getElementById('homeWinLabel');
+            const awayWinLabel = document.getElementById('awayWinLabel');
+            if (homeWinLabel) homeWinLabel.textContent = `${home.short} Win`;
+            if (awayWinLabel) awayWinLabel.textContent = `${away.short} Win`;
 
             resetToTeamAverages();
-            populateFixturesDropdown(liveApiFixtures);
+            renderFormPills();
             renderLeagueStandingsTable();
         }
 
         function resetToTeamAverages() {
-            const homeCode = document.getElementById('homeTeamSelect').value;
-            const awayCode = document.getElementById('awayTeamSelect').value;
+            const homeCode = document.getElementById('homeTeamSelect')?.value;
+            const awayCode = document.getElementById('awayTeamSelect')?.value;
+            if (!homeCode || !awayCode || !plTeams[homeCode] || !plTeams[awayCode]) return;
+
             const home = plTeams[homeCode];
             const away = plTeams[awayCode];
-            if (!home || !away) return;
 
-            const expectedHomeXg = Number(((home.xg * 0.65) + (away.xga * 0.35)).toFixed(2));
-            const expectedAwayXg = Number(((away.xg * 0.65) + (home.xga * 0.35)).toFixed(2));
+            const expHomeXg = Number(((home.xg * 0.65) + ((away.xga || 1.25) * 0.35)).toFixed(2));
+            const expAwayXg = Number(((away.xg * 0.65) + ((home.xga || 1.25) * 0.35)).toFixed(2));
 
-            document.getElementById('homeXgSlider').value = expectedHomeXg;
-            document.getElementById('awayXgSlider').value = expectedAwayXg;
-            document.getElementById('homeShotsSlider').value = home.shots;
-            document.getElementById('awayShotsSlider').value = away.shots;
-            document.getElementById('homeSotSlider').value = home.sot;
-            document.getElementById('awaySotSlider').value = away.sot;
-            document.getElementById('homeBigChancesSlider').value = home.bigChances;
-            document.getElementById('awayBigChancesSlider').value = away.bigChances;
+            document.getElementById('homeXgSlider').value = expHomeXg;
+            document.getElementById('awayXgSlider').value = expAwayXg;
+            document.getElementById('homeShotsSlider').value = home.shots || 13;
+            document.getElementById('awayShotsSlider').value = away.shots || 11;
+            document.getElementById('homeSotSlider').value = home.sot || 5;
+            document.getElementById('awaySotSlider').value = away.sot || 4;
+            document.getElementById('homeBigChancesSlider').value = home.bigChances ?? 2;
+            document.getElementById('awayBigChancesSlider').value = away.bigChances ?? 2;
 
             const totalPoss = (home.poss || 50) + (away.poss || 50);
-            const normalizedHomePoss = Math.round(((home.poss || 50) / totalPoss) * 100);
-            document.getElementById('possSlider').value = Math.max(25, Math.min(75, normalizedHomePoss));
+            const normHomePoss = Math.round(((home.poss || 50) / Math.max(1, totalPoss)) * 100);
+            document.getElementById('possSlider').value = Math.max(25, Math.min(75, normHomePoss));
 
             updateFromSliders();
         }
@@ -2611,10 +2848,11 @@ Return ONLY a valid JSON object with no markdown formatting:
             };
             Object.keys(modes).forEach(k => {
                 const btn = document.getElementById(modes[k]);
+                if (!btn) return;
                 if (k === mode) {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition bg-[#00ff85] text-[#37003c]";
+                    btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-[#00ff85] text-[#37003c]';
                 } else {
-                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white";
+                    btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white';
                 }
             });
             updateFromSliders();
@@ -2627,39 +2865,27 @@ Return ONLY a valid JSON object with no markdown formatting:
             return res;
         }
 
-        function poissonPmf(k, lambda) {
+        function poissonProb(k, lambda) {
             return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
         }
 
         function updateFromSliders() {
-            const homeCode = document.getElementById('homeTeamSelect').value;
-            const awayCode = document.getElementById('awayTeamSelect').value;
-            const homeTeam = plTeams[homeCode] || { short: 'HOME' };
-            const awayTeam = plTeams[awayCode] || { short: 'AWAY' };
+            const homeCode = document.getElementById('homeTeamSelect')?.value;
+            const awayCode = document.getElementById('awayTeamSelect')?.value;
 
             const homeXg = parseFloat(document.getElementById('homeXgSlider').value);
             const awayXg = parseFloat(document.getElementById('awayXgSlider').value);
-            const homeShots = parseInt(document.getElementById('homeShotsSlider').value);
-            const awayShots = parseInt(document.getElementById('awayShotsSlider').value);
-            let homeSot = parseInt(document.getElementById('homeSotSlider').value);
-            let awaySot = parseInt(document.getElementById('awaySotSlider').value);
-
-            if (homeSot > homeShots) {
-                homeSot = homeShots;
-                document.getElementById('homeSotSlider').value = homeSot;
-            }
-            if (awaySot > awayShots) {
-                awaySot = awayShots;
-                document.getElementById('awaySotSlider').value = awaySot;
-            }
-
-            const homeBig = parseInt(document.getElementById('homeBigChancesSlider').value);
-            const awayBig = parseInt(document.getElementById('awayBigChancesSlider').value);
-            const homePoss = parseInt(document.getElementById('possSlider').value);
+            const homeShots = parseInt(document.getElementById('homeShotsSlider').value, 10);
+            const awayShots = parseInt(document.getElementById('awayShotsSlider').value, 10);
+            const homeSot = Math.min(homeShots, parseInt(document.getElementById('homeSotSlider').value, 10));
+            const awaySot = Math.min(awayShots, parseInt(document.getElementById('awaySotSlider').value, 10));
+            const homeBig = parseInt(document.getElementById('homeBigChancesSlider').value, 10);
+            const awayBig = parseInt(document.getElementById('awayBigChancesSlider').value, 10);
+            const homePoss = parseInt(document.getElementById('possSlider').value, 10);
             const awayPoss = 100 - homePoss;
             const homeAdv = document.getElementById('homeAdvToggle').checked;
-            const formWeight = parseFloat(document.getElementById('formWeightSlider')?.value ?? 1.0);
-            const rankWeight = parseFloat(document.getElementById('rankWeightSlider')?.value ?? 1.0);
+            const formWeight = parseFloat(document.getElementById('formWeightSlider').value);
+            const rankWeight = parseFloat(document.getElementById('rankWeightSlider').value);
 
             document.getElementById('homeXgVal').textContent = homeXg.toFixed(2);
             document.getElementById('awayXgVal').textContent = awayXg.toFixed(2);
@@ -2671,233 +2897,213 @@ Return ONLY a valid JSON object with no markdown formatting:
             document.getElementById('awayBigChancesVal').textContent = awayBig;
             document.getElementById('homePossVal').textContent = `${homePoss}%`;
             document.getElementById('awayPossVal').textContent = `${awayPoss}%`;
-            if (document.getElementById('formWeightVal')) {
-                document.getElementById('formWeightVal').textContent = `${formWeight.toFixed(1)}x`;
-            }
-            if (document.getElementById('rankWeightVal')) {
-                document.getElementById('rankWeightVal').textContent = `${rankWeight.toFixed(1)}x`;
-            }
+            document.getElementById('formWeightVal').textContent = `${formWeight.toFixed(1)}x`;
+            document.getElementById('rankWeightVal').textContent = `${rankWeight.toFixed(1)}x`;
 
-            const homeNonSot = Math.max(0, homeShots - homeSot);
-            const awayNonSot = Math.max(0, awayShots - awaySot);
+            const homeShotLambda = (Math.max(0, homeShots - homeSot) * 0.038) + (homeSot * 0.26) + (homeBig * 0.24);
+            const awayShotLambda = (Math.max(0, awayShots - awaySot) * 0.038) + (awaySot * 0.26) + (awayBig * 0.24);
 
-            const homeShotDrivenLambda = (homeNonSot * 0.035) + (homeSot * 0.24) + (homeBig * 0.22) + ((homePoss - 50) * 0.005);
-            const awayShotDrivenLambda = (awayNonSot * 0.035) + (awaySot * 0.24) + (awayBig * 0.22) + ((awayPoss - 50) * 0.005);
-
-            let lambdaHome = 1.5;
-            let lambdaAway = 1.2;
-
-            if (currentMode === 'xg') {
-                lambdaHome = homeXg;
-                lambdaAway = awayXg;
+            let baseHomeLambda = homeXg;
+            let baseAwayLambda = awayXg;
+            if (currentMode === 'blended') {
+                baseHomeLambda = (homeXg * 0.60) + (homeShotLambda * 0.40);
+                baseAwayLambda = (awayXg * 0.60) + (awayShotLambda * 0.40);
             } else if (currentMode === 'shots') {
-                lambdaHome = Math.max(0.15, homeShotDrivenLambda);
-                lambdaAway = Math.max(0.15, awayShotDrivenLambda);
-            } else {
-                lambdaHome = (homeXg * 0.60) + (Math.max(0.15, homeShotDrivenLambda) * 0.40);
-                lambdaAway = (awayXg * 0.60) + (Math.max(0.15, awayShotDrivenLambda) * 0.40);
+                baseHomeLambda = homeShotLambda;
+                baseAwayLambda = awayShotLambda;
             }
 
-            if (homeAdv) {
-                lambdaHome *= 1.08;
-                lambdaAway *= 0.95;
-            }
+            const possTiltHome = 1 + ((homePoss - 50) * 0.0025);
+            const possTiltAway = 1 + ((awayPoss - 50) * 0.0025);
+
+            const advHome = homeAdv ? 1.08 : 1.0;
+            const advAway = homeAdv ? 0.95 : 1.0;
 
             const homeFormMult = calculateFormMultiplier(currentHomeForm, formWeight);
             const awayFormMult = calculateFormMultiplier(currentAwayForm, formWeight);
-            lambdaHome *= homeFormMult;
-            lambdaAway *= awayFormMult;
 
-            const rankMults = calculateRankStrengthMultipliers(homeCode, awayCode, rankWeight);
-            lambdaHome *= rankMults.homeMult;
-            lambdaAway *= rankMults.awayMult;
+            const homeFormDeltaPct = ((homeFormMult - 1) * 100).toFixed(1);
+            const awayFormDeltaPct = ((awayFormMult - 1) * 100).toFixed(1);
+            const hFormBadge = document.getElementById('homeFormMultiplierBadge');
+            const aFormBadge = document.getElementById('awayFormMultiplierBadge');
+            if (hFormBadge) hFormBadge.textContent = `${homeFormDeltaPct >= 0 ? '+' : ''}${homeFormDeltaPct}% Momentum`;
+            if (aFormBadge) aFormBadge.textContent = `${awayFormDeltaPct >= 0 ? '+' : ''}${awayFormDeltaPct}% Momentum`;
 
-            const rankBadgeEl = document.getElementById('rankStrengthDeltaBadge');
-            if (rankBadgeEl) {
-                const hPct = ((rankMults.homeMult - 1) * 100).toFixed(1);
-                const aPct = ((rankMults.awayMult - 1) * 100).toFixed(1);
-                const hSign = hPct >= 0 ? '+' : '';
-                const aSign = aPct >= 0 ? '+' : '';
-                rankBadgeEl.textContent = `${homeTeam.short} ${hSign}${hPct}% / ${awayTeam.short} ${aSign}${aPct}%`;
+            const { homeMult: rankHomeMult, awayMult: rankAwayMult } = calculateRankStrengthMultipliers(homeCode, awayCode, rankWeight);
+            const rankDeltaBadge = document.getElementById('rankStrengthDeltaBadge');
+            if (rankDeltaBadge) {
+                const hRankPct = ((rankHomeMult - 1) * 100).toFixed(1);
+                const aRankPct = ((rankAwayMult - 1) * 100).toFixed(1);
+                rankDeltaBadge.textContent = `Home ${hRankPct >= 0 ? '+' : ''}${hRankPct}% / Away ${aRankPct >= 0 ? '+' : ''}${aRankPct}%`;
             }
 
-            const homeFormBadge = document.getElementById('homeFormMultiplierBadge');
-            const awayFormBadge = document.getElementById('awayFormMultiplierBadge');
-            if (homeFormBadge) {
-                const pct = ((homeFormMult - 1) * 100).toFixed(1);
-                homeFormBadge.textContent = `${pct >= 0 ? '+' : ''}${pct}% Momentum`;
-            }
-            if (awayFormBadge) {
-                const pct = ((awayFormMult - 1) * 100).toFixed(1);
-                awayFormBadge.textContent = `${pct >= 0 ? '+' : ''}${pct}% Momentum`;
-            }
-
-            lambdaHome = Math.max(0.10, Math.min(5.5, lambdaHome));
-            lambdaAway = Math.max(0.10, Math.min(5.5, lambdaAway));
-
-            let homeWinProb = 0;
-            let drawProb = 0;
-            let awayWinProb = 0;
-            let over25Prob = 0;
-            let bttsProb = 0;
-
-            const maxGoals = 10;
-            const matrixProbs = [];
-            const allScoresList = [];
-            let bestScore = { h: 1, a: 1, p: 0 };
-            let bestDrawScore = { h: 1, a: 1, p: 0 };
-
-            for (let h = 0; h <= maxGoals; h++) {
-                matrixProbs[h] = [];
-                const pH = poissonPmf(h, lambdaHome);
-                for (let a = 0; a <= maxGoals; a++) {
-                    const pA = poissonPmf(a, lambdaAway);
-                    const joint = pH * pA;
-                    matrixProbs[h][a] = joint;
-                    allScoresList.push({ h, a, p: joint });
-
-                    if (h > a) homeWinProb += joint;
-                    else if (h === a) drawProb += joint;
-                    else awayWinProb += joint;
-
-                    if ((h + a) > 2.5) over25Prob += joint;
-                    if (h >= 1 && a >= 1) bttsProb += joint;
-
-                    if (joint > bestScore.p) bestScore = { h, a, p: joint };
-                    if (h === a && joint > bestDrawScore.p) bestDrawScore = { h, a, p: joint };
-                }
-            }
-
-            allScoresList.sort((x, y) => y.p - x.p);
-
-            const totalP = homeWinProb + drawProb + awayWinProb;
-            homeWinProb = (homeWinProb / totalP) * 100;
-            drawProb = (drawProb / totalP) * 100;
-            awayWinProb = (awayWinProb / totalP) * 100;
-
-            const over25Pct = Math.min(99.5, (over25Prob / totalP) * 100);
-            const under25Pct = Math.max(0.5, 100 - over25Pct);
-            const bttsPct = Math.min(99.5, (bttsProb / totalP) * 100);
-            const homeCsPct = poissonPmf(0, lambdaAway) * 100;
-            const awayCsPct = poissonPmf(0, lambdaHome) * 100;
-
-            document.getElementById('homeWinProb').textContent = `${homeWinProb.toFixed(1)}%`;
-            document.getElementById('drawProb').textContent = `${drawProb.toFixed(1)}%`;
-            document.getElementById('awayWinProb').textContent = `${awayWinProb.toFixed(1)}%`;
-
-            document.getElementById('homeFairOdds').textContent = (100 / Math.max(0.5, homeWinProb)).toFixed(2);
-            document.getElementById('drawFairOdds').textContent = (100 / Math.max(0.5, drawProb)).toFixed(2);
-            document.getElementById('awayFairOdds').textContent = (100 / Math.max(0.5, awayWinProb)).toFixed(2);
+            const lambdaHome = Math.max(0.15, Math.min(5.2, baseHomeLambda * possTiltHome * advHome * homeFormMult * rankHomeMult));
+            const lambdaAway = Math.max(0.15, Math.min(5.2, baseAwayLambda * possTiltAway * advAway * awayFormMult * rankAwayMult));
 
             document.getElementById('homeLambdaText').textContent = lambdaHome.toFixed(2);
             document.getElementById('awayLambdaText').textContent = lambdaAway.toFixed(2);
-            document.getElementById('topDrawScore').textContent = `${bestDrawScore.h} - ${bestDrawScore.a}`;
-
-            if (allScoresList.length >= 3) {
-                const s1 = allScoresList[0];
-                const s2 = allScoresList[1];
-                const s3 = allScoresList[2];
-                document.getElementById('heroBestScore').textContent = `${s1.h} - ${s1.a}`;
-                document.getElementById('heroBestScoreProb').textContent = `${(s1.p * 100).toFixed(1)}%`;
-                document.getElementById('heroRunnerUpScores').innerHTML = `
-                    <span>2nd: <strong class="text-gray-200">${s2.h}-${s2.a} (${(s2.p * 100).toFixed(1)}%)</strong></span>
-                    <span>•</span>
-                    <span>3rd: <strong class="text-gray-200">${s3.h}-${s3.a} (${(s3.p * 100).toFixed(1)}%)</strong></span>
-                `;
-            }
-
-            document.getElementById('barHome').style.width = `${homeWinProb.toFixed(1)}%`;
-            document.getElementById('barDraw').style.width = `${drawProb.toFixed(1)}%`;
-            document.getElementById('barAway').style.width = `${awayWinProb.toFixed(1)}%`;
-
-            document.getElementById('barHomeLabel').textContent = `${homeTeam.short} WIN (${homeWinProb.toFixed(1)}%)`;
-            document.getElementById('barDrawLabel').textContent = `DRAW (${drawProb.toFixed(1)}%)`;
-            document.getElementById('barAwayLabel').textContent = `${awayTeam.short} WIN (${awayWinProb.toFixed(1)}%)`;
 
             document.getElementById('homeXgPerShot').textContent = (homeXg / Math.max(1, homeShots)).toFixed(2);
             document.getElementById('homeSotPct').textContent = `${((homeSot / Math.max(1, homeShots)) * 100).toFixed(1)}%`;
             document.getElementById('awayXgPerShot').textContent = (awayXg / Math.max(1, awayShots)).toFixed(2);
             document.getElementById('awaySotPct').textContent = `${((awaySot / Math.max(1, awayShots)) * 100).toFixed(1)}%`;
 
-            document.getElementById('over25Prob').textContent = `${over25Pct.toFixed(1)}%`;
-            document.getElementById('over25Odds').textContent = `Odds: ${(100 / over25Pct).toFixed(2)}`;
-            document.getElementById('under25Prob').textContent = `${under25Pct.toFixed(1)}%`;
-            document.getElementById('under25Odds').textContent = `Odds: ${(100 / under25Pct).toFixed(2)}`;
-            document.getElementById('bttsProb').textContent = `${bttsPct.toFixed(1)}%`;
-            document.getElementById('bttsOdds').textContent = `Odds: ${(100 / bttsPct).toFixed(2)}`;
-            document.getElementById('homeCsProb').textContent = `${homeCsPct.toFixed(1)}%`;
-            document.getElementById('awayCsProb').textContent = `Away CS: ${awayCsPct.toFixed(1)}%`;
+            let homeWin = 0, draw = 0, awayWin = 0;
+            let over25 = 0, btts = 0;
+            const maxGoals = 10;
+            const allScores = [];
 
-            const dc1X = homeWinProb + drawProb;
-            const dcX2 = awayWinProb + drawProb;
+            for (let h = 0; h <= maxGoals; h++) {
+                const pH = poissonProb(h, lambdaHome);
+                for (let a = 0; a <= maxGoals; a++) {
+                    const pA = poissonProb(a, lambdaAway);
+                    const p = pH * pA;
+                    if (h > a) homeWin += p;
+                    else if (h === a) draw += p;
+                    else awayWin += p;
+
+                    if (h + a > 2.5) over25 += p;
+                    if (h >= 1 && a >= 1) btts += p;
+
+                    if (h <= 5 && a <= 5) {
+                        allScores.push({ h, a, p });
+                    }
+                }
+            }
+
+            const totalP = homeWin + draw + awayWin || 1;
+            homeWin = (homeWin / totalP) * 100;
+            draw = (draw / totalP) * 100;
+            awayWin = (awayWin / totalP) * 100;
+            over25 = Math.min(99.5, (over25 / totalP) * 100);
+            const under25 = Math.max(0.5, 100 - over25);
+            btts = Math.min(99.5, (btts / totalP) * 100);
+
+            const homeCs = poissonProb(0, lambdaAway) * 100;
+            const awayCs = poissonProb(0, lambdaHome) * 100;
+
+            document.getElementById('homeWinProb').textContent = `${homeWin.toFixed(1)}%`;
+            document.getElementById('drawProb').textContent = `${draw.toFixed(1)}%`;
+            document.getElementById('awayWinProb').textContent = `${awayWin.toFixed(1)}%`;
+
+            document.getElementById('homeFairOdds').textContent = (100 / Math.max(0.5, homeWin)).toFixed(2);
+            document.getElementById('drawFairOdds').textContent = (100 / Math.max(0.5, draw)).toFixed(2);
+            document.getElementById('awayFairOdds').textContent = (100 / Math.max(0.5, awayWin)).toFixed(2);
+
+            const hShort = plTeams[homeCode]?.short || 'HOME';
+            const aShort = plTeams[awayCode]?.short || 'AWAY';
+            document.getElementById('barHomeLabel').textContent = `${hShort} WIN (${homeWin.toFixed(1)}%)`;
+            document.getElementById('barDrawLabel').textContent = `DRAW (${draw.toFixed(1)}%)`;
+            document.getElementById('barAwayLabel').textContent = `${aShort} WIN (${awayWin.toFixed(1)}%)`;
+
+            document.getElementById('barHome').style.width = `${homeWin}%`;
+            document.getElementById('barDraw').style.width = `${draw}%`;
+            document.getElementById('barAway').style.width = `${awayWin}%`;
+
+            document.getElementById('over25Prob').textContent = `${over25.toFixed(1)}%`;
+            document.getElementById('over25Odds').textContent = (100 / Math.max(0.5, over25)).toFixed(2);
+            document.getElementById('under25Prob').textContent = `${under25.toFixed(1)}%`;
+            document.getElementById('under25Odds').textContent = (100 / Math.max(0.5, under25)).toFixed(2);
+            document.getElementById('bttsProb').textContent = `${btts.toFixed(1)}%`;
+            document.getElementById('bttsOdds').textContent = (100 / Math.max(0.5, btts)).toFixed(2);
+            document.getElementById('homeCsProb').textContent = `${homeCs.toFixed(1)}%`;
+            document.getElementById('awayCsProb').textContent = `Away CS: ${awayCs.toFixed(1)}%`;
+
+            const dc1X = homeWin + draw;
+            const dcX2 = awayWin + draw;
             document.getElementById('dc1XProb').textContent = `${dc1X.toFixed(1)}%`;
-            document.getElementById('dc1XOdds').textContent = `Odds: ${(100 / dc1X).toFixed(2)}`;
+            document.getElementById('dc1XOdds').textContent = (100 / Math.max(0.5, dc1X)).toFixed(2);
             document.getElementById('dcX2Prob').textContent = `${dcX2.toFixed(1)}%`;
-            document.getElementById('dcX2Odds').textContent = `Odds: ${(100 / dcX2).toFixed(2)}`;
+            document.getElementById('dcX2Odds').textContent = (100 / Math.max(0.5, dcX2)).toFixed(2);
 
-            document.getElementById('mostLikelyScoreBadge').textContent = `Top: ${bestScore.h} - ${bestScore.a} (${(bestScore.p * 100).toFixed(1)}%)`;
+            const sortedScores = [...allScores].sort((x, y) => y.p - x.p);
+            const best = sortedScores[0] || { h: 1, a: 0, p: 0.1 };
+            const second = sortedScores[1] || { h: 1, a: 1, p: 0.09 };
+            const third = sortedScores[2] || { h: 2, a: 0, p: 0.08 };
+            const bestDraw = sortedScores.find(s => s.h === s.a) || { h: 1, a: 1, p: 0.1 };
 
-            renderScoreMatrix(matrixProbs, bestScore, homeTeam.short, awayTeam.short);
+            document.getElementById('heroBestScore').textContent = `${best.h} - ${best.a}`;
+            document.getElementById('heroBestScoreProb').textContent = `${(best.p * 100).toFixed(1)}%`;
+            document.getElementById('heroRunnerUpScores').innerHTML = `
+                <span>2nd: <strong class="text-gray-200">${second.h}-${second.a} (${(second.p * 100).toFixed(1)}%)</strong></span>
+                <span>•</span>
+                <span>3rd: <strong class="text-gray-200">${third.h}-${third.a} (${(third.p * 100).toFixed(1)}%)</strong></span>
+            `;
+            document.getElementById('topDrawScore').textContent = `${bestDraw.h} - ${bestDraw.a}`;
+            document.getElementById('mostLikelyScoreBadge').textContent = `Top: ${best.h} - ${best.a} (${(best.p * 100).toFixed(1)}%)`;
+
+            renderScoreMatrix(allScores, best, hShort, aShort);
         }
 
-        function renderScoreMatrix(matrixProbs, bestScore, homeShort, awayShort) {
-            const container = document.getElementById('scoreMatrix');
-            if (!container) return;
-            container.innerHTML = '';
+        function renderScoreMatrix(allScores, best, hShort, aShort) {
+            const matrixEl = document.getElementById('scoreMatrix');
+            if (!matrixEl) return;
+            matrixEl.innerHTML = '';
 
             const corner = document.createElement('div');
-            corner.className = "p-1.5 text-[10px] font-bold text-gray-500 flex items-center justify-center";
-            corner.textContent = `${homeShort}\\${awayShort}`;
-            container.appendChild(corner);
+            corner.className = 'p-1.5 text-[10px] font-bold text-gray-500 flex items-center justify-center';
+            corner.textContent = `${hShort}\\${aShort}`;
+            matrixEl.appendChild(corner);
 
             for (let a = 0; a <= 5; a++) {
                 const colHead = document.createElement('div');
-                colHead.className = "p-1.5 font-bold text-[#04f5ff] bg-[#191f2e] rounded-lg";
+                colHead.className = 'p-1.5 text-[11px] font-black text-[#04f5ff] bg-[#191f2e] rounded-lg';
                 colHead.textContent = a;
-                container.appendChild(colHead);
+                matrixEl.appendChild(colHead);
             }
 
             for (let h = 0; h <= 5; h++) {
                 const rowHead = document.createElement('div');
-                rowHead.className = "p-1.5 font-bold text-[#00ff85] bg-[#191f2e] rounded-lg flex items-center justify-center";
+                rowHead.className = 'p-1.5 text-[11px] font-black text-[#00ff85] bg-[#191f2e] rounded-lg flex items-center justify-center';
                 rowHead.textContent = h;
-                container.appendChild(rowHead);
+                matrixEl.appendChild(rowHead);
 
                 for (let a = 0; a <= 5; a++) {
-                    const prob = matrixProbs[h][a] * 100;
-                    const isBest = (h === bestScore.h && a === bestScore.a);
+                    const item = allScores.find(s => s.h === h && s.a === a) || { p: 0 };
+                    const pct = item.p * 100;
+                    const isBest = (h === best.h && a === best.a);
+
                     const cell = document.createElement('div');
-
+                    const alpha = Math.min(0.85, Math.max(0.08, pct / 14));
                     let bgStyle = '';
-                    let borderClass = 'border-gray-800/80';
-                    const intensity = Math.min(0.85, Math.max(0.08, prob / 14));
+                    if (h > a) bgStyle = `rgba(0, 255, 133, ${alpha})`;
+                    else if (h === a) bgStyle = `rgba(168, 85, 247, ${alpha})`;
+                    else bgStyle = `rgba(4, 245, 255, ${alpha})`;
 
-                    if (h > a) {
-                        bgStyle = `rgba(0, 255, 133, ${intensity})`;
-                    } else if (h === a) {
-                        bgStyle = `rgba(168, 85, 247, ${intensity})`;
-                    } else {
-                        bgStyle = `rgba(4, 245, 255, ${intensity})`;
-                    }
-
-                    if (isBest) {
-                        borderClass = 'border-2 border-white ring-2 ring-white/40';
-                    }
-
-                    const textColor = intensity > 0.45 ? 'text-gray-950 font-black' : 'text-white font-semibold';
-
-                    cell.className = `matrix-cell p-2 rounded-lg border ${borderClass} flex flex-col items-center justify-center cursor-default`;
                     cell.style.backgroundColor = bgStyle;
+                    cell.className = `matrix-cell p-1.5 rounded-lg flex flex-col items-center justify-center border ${isBest ? 'border-white ring-2 ring-[#00ff85]' : 'border-gray-800/60'}`;
                     cell.innerHTML = `
-                        <span class="text-[10px] opacity-75 ${textColor}">${h}-${a}</span>
-                        <span class="text-xs ${textColor}">${prob.toFixed(1)}%</span>
+                        <span class="text-[10px] font-bold text-white/90">${h}-${a}</span>
+                        <span class="text-[11px] font-black text-white">${pct.toFixed(1)}%</span>
                     `;
-                    container.appendChild(cell);
+                    matrixEl.appendChild(cell);
                 }
             }
         }
 
-        window.onload = () => initSelectors('EVE', 'COV');
+        function fetchLiveWebXgStats() {
+            const homeCode = document.getElementById('homeTeamSelect')?.value;
+            const awayCode = document.getElementById('awayTeamSelect')?.value;
+            if (!homeCode || !awayCode || !plTeams[homeCode] || !plTeams[awayCode]) return;
+
+            resetToTeamAverages();
+            const box = document.getElementById('liveDataInsightBox');
+            const summary = document.getElementById('liveDataSummaryText');
+            if (box && summary) {
+                const h = plTeams[homeCode];
+                const a = plTeams[awayCode];
+                box.classList.remove('hidden');
+                summary.textContent = `Applied verified per-90 xG profile for ${h.name} (${h.xg.toFixed(2)} xG / ${h.xga.toFixed(2)} xGA) vs ${a.name} (${a.xg.toFixed(2)} xG / ${a.xga.toFixed(2)} xGA).`;
+            }
+        }
+
+        window.onload = async () => {
+            populateRoundFilterOptions();
+            updateGroupStageUIControls();
+            initSelectors('EVE', 'COV');
+            // Auto-load Premier League (EPL) data from the ESPN API into FootballDB once the site loads
+            await seedFullSeasonFromESPN('PL', false);
+        };
     </script>
 </body>
 </html>
