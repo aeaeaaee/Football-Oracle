@@ -1,13 +1,3 @@
-/**
- * ============================================================================
- * FOOTBALLDB — STANDALONE DATABASE & ESPN API INGESTION LAYER (football_db.js)
- * ============================================================================
- * Pipeline Architecture (per BEHAVIOUR.md):
- *   1. ESPN API (/standings, /scoreboard, /teams/{id}/schedule)
- *   2. Write & persist into FootballDB (football_db.js / localStorage + Exportable .js)
- *   3. Webpage UI Layer (premier_league_predictor.html) reads strictly from FootballDB
- */
-
 (function (global) {
     'use strict';
 
@@ -15,9 +5,6 @@
         PL: {
             name: "Premier League",
             espnSlug: "eng.1",
-            logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png",
-            defaultHome: "EVE",
-            defaultAway: "COV",
             matchesPerRound: 10,
             maxTeams: 20,
             totalRounds: 38,
@@ -27,9 +14,6 @@
         LALIGA: {
             name: "La Liga",
             espnSlug: "esp.1",
-            logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png",
-            defaultHome: "ESP",
-            defaultAway: "DEP",
             matchesPerRound: 10,
             maxTeams: 20,
             totalRounds: 38,
@@ -39,14 +23,23 @@
         UCL: {
             name: "UEFA Champions League",
             espnSlug: "uefa.champions",
-            logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png",
-            defaultHome: "FEN",
-            defaultAway: "LIV",
             matchesPerRound: 18,
             maxTeams: 36,
             totalRounds: 8,
             roundPrefix: "UCL",
             activeRound: "UCL4"
+        },
+        UNL: {
+            name: "UEFA Nations League",
+            espnSlug: "uefa.nations",
+            logo: "https://en.wikipedia.org/wiki/Special:FilePath/UEFA_Nations_League.svg",
+            matchesPerRound: 26,
+            maxTeams: 54,
+            totalRounds: 6,
+            roundPrefix: "UNL",
+            activeRound: "UNL5",
+            phaseType: "GROUP_STAGE",
+            totalGroups: 14
         }
     };
 
@@ -135,55 +128,291 @@
         SAB: { espnId: 21580, name: "Sabah FK", short: "SAB", color: "#4B2E83", logo: "https://ssl.gstatic.com/onebox/media/sports/logos/optimized/v6mEQSNxXxroXdqhpR3rdQ_500x500.png", xg: 1.08, xga: 1.78, shots: 10, sot: 3, bigChances: 1, poss: 43, played: 3, gf: 1, ga: 9, pts: 0, form: ['D','L','D','W','D'] }
     };
 
-    // PURGED LA LIGA SEED FIXTURES: La Liga starts empty (`LALIGA: []`) so it is 100% populated from the live ESPN API!
+    // Official 2026-27 UEFA Nations League — All 14 Groups (Groups A–N / 54 National Teams)
+    const unlTeamsData = {
+        // Group A (League A1): France, Italy, Belgium, Türkiye
+        FRA: { espnId: 478, name: "France", short: "FRA", group: "Group A (League A1)", groupOrder: 1, groupRank: 1, color: "#002654", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fra.png", xg: 2.12, xga: 0.85, shots: 17, sot: 6, bigChances: 4, poss: 59, played: 4, gf: 7, ga: 2, gd: 5, pts: 10, espnRank: 1, form: ['W','W','W','D','W'] },
+        ITA: { espnId: 162, name: "Italy", short: "ITA", group: "Group A (League A1)", groupOrder: 1, groupRank: 2, color: "#0064AA", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ita.png", xg: 1.94, xga: 1.08, shots: 15, sot: 6, bigChances: 3, poss: 55, played: 4, gf: 8, ga: 5, gd: 3, pts: 7, espnRank: 2, form: ['W','L','W','D','W'] },
+        BEL: { espnId: 459, name: "Belgium", short: "BEL", group: "Group A (League A1)", groupOrder: 1, groupRank: 3, color: "#E30613", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bel.png", xg: 1.66, xga: 1.28, shots: 14, sot: 5, bigChances: 2, poss: 54, played: 4, gf: 6, ga: 5, gd: 1, pts: 6, espnRank: 3, form: ['L','W','L','W','L'] },
+        TUR: { espnId: 465, name: "Türkiye", short: "TUR", group: "Group A (League A1)", groupOrder: 1, groupRank: 4, color: "#E30A17", logo: "https://a.espncdn.com/i/teamlogos/countries/500/tur.png", xg: 1.15, xga: 1.95, shots: 11, sot: 4, bigChances: 1, poss: 46, played: 4, gf: 2, ga: 11, gd: -9, pts: 0, espnRank: 4, form: ['W','L','L','L','L'] },
+
+        // Group B (League A2): Netherlands, Greece, Germany, Serbia
+        NED: { espnId: 449, name: "Netherlands", short: "NED", group: "Group B (League A2)", groupOrder: 2, groupRank: 1, color: "#F36C21", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ned.png", xg: 1.88, xga: 1.10, shots: 15, sot: 6, bigChances: 3, poss: 58, played: 4, gf: 7, ga: 5, gd: 2, pts: 8, espnRank: 5, form: ['W','D','W','D','W'] },
+        GRE: { espnId: 456, name: "Greece", short: "GRE", group: "Group B (League A2)", groupOrder: 2, groupRank: 2, color: "#0D5EAF", logo: "https://a.espncdn.com/i/teamlogos/countries/500/gre.png", xg: 1.56, xga: 0.96, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 8, espnRank: 6, form: ['W','W','W','D','D'] },
+        GER: { espnId: 481, name: "Germany", short: "GER", group: "Group B (League A2)", groupOrder: 2, groupRank: 3, color: "#000000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ger.png", xg: 1.82, xga: 0.92, shots: 16, sot: 6, bigChances: 3, poss: 60, played: 4, gf: 3, ga: 2, gd: 1, pts: 5, espnRank: 7, form: ['W','D','L','W','D'] },
+        SRB: { espnId: 6757, name: "Serbia", short: "SRB", group: "Group B (League A2)", groupOrder: 2, groupRank: 4, color: "#C6363C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/srb.png", xg: 1.12, xga: 1.68, shots: 10, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 8, gd: -5, pts: 0, espnRank: 8, form: ['D','L','L','L','L'] },
+
+        // Group C (League A3): Spain, England, Croatia, Czechia
+        ESP: { espnId: 164, name: "Spain", short: "ESP", group: "Group C (League A3)", groupOrder: 3, groupRank: 1, color: "#AA151B", logo: "https://a.espncdn.com/i/teamlogos/countries/500/esp.png", xg: 2.35, xga: 0.95, shots: 18, sot: 7, bigChances: 4, poss: 64, played: 4, gf: 12, ga: 5, gd: 7, pts: 12, espnRank: 9, form: ['W','W','W','W','W'] },
+        ENG: { espnId: 448, name: "England", short: "ENG", group: "Group C (League A3)", groupOrder: 3, groupRank: 2, color: "#CE1126", logo: "https://a.espncdn.com/i/teamlogos/countries/500/eng.png", xg: 2.28, xga: 0.88, shots: 17, sot: 7, bigChances: 4, poss: 61, played: 4, gf: 14, ga: 3, gd: 11, pts: 9, espnRank: 10, form: ['W','L','W','W','W'] },
+        CRO: { espnId: 477, name: "Croatia", short: "CRO", group: "Group C (League A3)", groupOrder: 3, groupRank: 3, color: "#FF0000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cro.png", xg: 1.34, xga: 2.05, shots: 12, sot: 4, bigChances: 2, poss: 51, played: 4, gf: 4, ga: 14, gd: -10, pts: 3, espnRank: 11, form: ['D','W','L','L','L'] },
+        CZE: { espnId: 487, name: "Czechia", short: "CZE", group: "Group C (League A3)", groupOrder: 3, groupRank: 4, color: "#11457E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cze.png", xg: 1.08, xga: 1.88, shots: 10, sot: 3, bigChances: 1, poss: 43, played: 4, gf: 2, ga: 10, gd: -8, pts: 0, espnRank: 12, form: ['W','L','L','L','L'] },
+
+        // Group D (League A4): Portugal, Denmark, Wales, Norway
+        POR: { espnId: 482, name: "Portugal", short: "POR", group: "Group D (League A4)", groupOrder: 4, groupRank: 1, color: "#E42518", logo: "https://a.espncdn.com/i/teamlogos/countries/500/por.png", xg: 2.18, xga: 0.92, shots: 17, sot: 6, bigChances: 4, poss: 61, played: 4, gf: 9, ga: 4, gd: 5, pts: 12, espnRank: 13, form: ['W','W','W','W','W'] },
+        DEN: { espnId: 479, name: "Denmark", short: "DEN", group: "Group D (League A4)", groupOrder: 4, groupRank: 2, color: "#C8102E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/den.png", xg: 1.62, xga: 1.38, shots: 13, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 7, gd: 0, pts: 6, espnRank: 14, form: ['D','L','W','L','W'] },
+        WAL: { espnId: 578, name: "Wales", short: "WAL", group: "Group D (League A4)", groupOrder: 4, groupRank: 3, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/wal.png", xg: 1.15, xga: 1.36, shots: 10, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 5, gd: -3, pts: 3, espnRank: 15, form: ['W','L','L','W','L'] },
+        NOR: { espnId: 463, name: "Norway", short: "NOR", group: "Group D (League A4)", groupOrder: 4, groupRank: 4, color: "#BA0C2F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/nor.png", xg: 1.54, xga: 1.65, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 8, gd: -2, pts: 3, espnRank: 16, form: ['W','W','L','L','L'] },
+
+        // Group E (League B1): Switzerland, Slovenia, Scotland, North Macedonia
+        SUI: { espnId: 475, name: "Switzerland", short: "SUI", group: "Group E (League B1)", groupOrder: 5, groupRank: 1, color: "#FF0000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/sui.png", xg: 2.05, xga: 0.65, shots: 16, sot: 6, bigChances: 3, poss: 59, played: 4, gf: 11, ga: 1, gd: 10, pts: 12, espnRank: 17, form: ['D','W','W','W','W'] },
+        SVN: { espnId: 453, name: "Slovenia", short: "SVN", group: "Group E (League B1)", groupOrder: 5, groupRank: 2, color: "#005CE6", logo: "https://a.espncdn.com/i/teamlogos/countries/500/svn.png", xg: 1.46, xga: 1.02, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 7, espnRank: 18, form: ['W','D','W','L','W'] },
+        SCO: { espnId: 580, name: "Scotland", short: "SCO", group: "Group E (League B1)", groupOrder: 5, groupRank: 3, color: "#003399", logo: "https://a.espncdn.com/i/teamlogos/countries/500/sco.png", xg: 1.18, xga: 1.32, shots: 11, sot: 4, bigChances: 1, poss: 47, played: 4, gf: 3, ga: 5, gd: -2, pts: 4, espnRank: 19, form: ['D','D','L','W','L'] },
+        MKD: { espnId: 2490, name: "North Macedonia", short: "MKD", group: "Group E (League B1)", groupOrder: 5, groupRank: 4, color: "#D20000", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mkd.png", xg: 0.78, xga: 1.92, shots: 8, sot: 2, bigChances: 1, poss: 42, played: 4, gf: 0, ga: 10, gd: -10, pts: 0, espnRank: 20, form: ['W','L','L','L','L'] },
+
+        // Group F (League B2): Northern Ireland, Hungary, Ukraine, Georgia
+        NIR: { espnId: 581, name: "Northern Ireland", short: "NIR", group: "Group F (League B2)", groupOrder: 6, groupRank: 1, color: "#009A44", logo: "https://a.espncdn.com/i/teamlogos/countries/500/nir.png", xg: 1.42, xga: 0.62, shots: 12, sot: 4, bigChances: 2, poss: 48, played: 4, gf: 4, ga: 0, gd: 4, pts: 8, espnRank: 21, form: ['W','W','D','W','D'] },
+        HUN: { espnId: 484, name: "Hungary", short: "HUN", group: "Group F (League B2)", groupOrder: 6, groupRank: 2, color: "#CD2A3E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/hun.png", xg: 1.32, xga: 0.88, shots: 11, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 3, ga: 2, gd: 1, pts: 7, espnRank: 22, form: ['D','L','D','W','W'] },
+        UKR: { espnId: 457, name: "Ukraine", short: "UKR", group: "Group F (League B2)", groupOrder: 6, groupRank: 3, color: "#FFD700", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ukr.png", xg: 1.15, xga: 1.36, shots: 11, sot: 3, bigChances: 1, poss: 52, played: 4, gf: 2, ga: 5, gd: -3, pts: 4, espnRank: 23, form: ['D','W','D','L','L'] },
+        GEO: { espnId: 2483, name: "Georgia", short: "GEO", group: "Group F (League B2)", groupOrder: 6, groupRank: 4, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/geo.png", xg: 0.92, xga: 1.05, shots: 9, sot: 3, bigChances: 1, poss: 48, played: 4, gf: 0, ga: 2, gd: -2, pts: 2, espnRank: 24, form: ['L','L','D','L','D'] },
+
+        // Group G (League B3): Austria, Kosovo, Republic of Ireland, Israel
+        AUT: { espnId: 474, name: "Austria", short: "AUT", group: "Group G (League B3)", groupOrder: 7, groupRank: 1, color: "#ED2939", logo: "https://a.espncdn.com/i/teamlogos/countries/500/aut.png", xg: 1.85, xga: 1.12, shots: 15, sot: 6, bigChances: 3, poss: 56, played: 4, gf: 9, ga: 5, gd: 4, pts: 8, espnRank: 25, form: ['W','W','W','D','D'] },
+        KOS: { espnId: 18060, name: "Kosovo", short: "KOS", group: "Group G (League B3)", groupOrder: 7, groupRank: 2, color: "#244AA5", logo: "https://a.espncdn.com/i/teamlogos/countries/500/kos.png", xg: 1.24, xga: 1.18, shots: 11, sot: 4, bigChances: 2, poss: 48, played: 4, gf: 3, ga: 4, gd: -1, pts: 5, espnRank: 26, form: ['W','W','L','D','D'] },
+        IRL: { espnId: 476, name: "Republic of Ireland", short: "IRL", group: "Group G (League B3)", groupOrder: 7, groupRank: 3, color: "#169B62", logo: "https://a.espncdn.com/i/teamlogos/countries/500/irl.png", xg: 1.42, xga: 1.15, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 4, gd: 2, pts: 5, espnRank: 27, form: ['L','L','W','D','D'] },
+        ISR: { espnId: 466, name: "Israel", short: "ISR", group: "Group G (League B3)", groupOrder: 7, groupRank: 4, color: "#0038B8", logo: "https://a.espncdn.com/i/teamlogos/countries/500/isr.png", xg: 0.96, xga: 1.62, shots: 9, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 7, gd: -5, pts: 2, espnRank: 28, form: ['L','L','L','D','D'] },
+
+        // Group H (League B4): Sweden, Bosnia and Herzegovina, Poland, Romania
+        SWE: { espnId: 469, name: "Sweden", short: "SWE", group: "Group H (League B4)", groupOrder: 8, groupRank: 1, color: "#FECC00", logo: "https://a.espncdn.com/i/teamlogos/countries/500/swe.png", xg: 1.82, xga: 0.95, shots: 15, sot: 6, bigChances: 3, poss: 55, played: 4, gf: 7, ga: 3, gd: 4, pts: 10, espnRank: 29, form: ['W','W','W','D','W'] },
+        BIH: { espnId: 579, name: "Bosnia and Herzegovina", short: "BIH", group: "Group H (League B4)", groupOrder: 8, groupRank: 2, color: "#002395", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bih.png", xg: 1.54, xga: 1.02, shots: 13, sot: 5, bigChances: 2, poss: 49, played: 4, gf: 6, ga: 3, gd: 3, pts: 8, espnRank: 30, form: ['L','D','W','D','W'] },
+        POL: { espnId: 471, name: "Poland", short: "POL", group: "Group H (League B4)", groupOrder: 8, groupRank: 3, color: "#DC143C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/pol.png", xg: 1.58, xga: 1.18, shots: 14, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 4, gd: 3, pts: 4, espnRank: 31, form: ['L','D','L','W','L'] },
+        ROU: { espnId: 473, name: "Romania", short: "ROU", group: "Group H (League B4)", groupOrder: 8, groupRank: 4, color: "#FCD116", logo: "https://a.espncdn.com/i/teamlogos/countries/500/rou.png", xg: 0.98, xga: 2.15, shots: 9, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 13, gd: -10, pts: 0, espnRank: 32, form: ['W','L','L','L','L'] },
+
+        // Group I (League C1): Albania, Belarus, Finland, San Marino
+        ALB: { espnId: 583, name: "Albania", short: "ALB", group: "Group I (League C1)", groupOrder: 9, groupRank: 1, color: "#E41E20", logo: "https://a.espncdn.com/i/teamlogos/countries/500/alb.png", xg: 1.72, xga: 0.88, shots: 14, sot: 5, bigChances: 3, poss: 54, played: 4, gf: 8, ga: 3, gd: 5, pts: 9, espnRank: 33, form: ['W','W','W','L','W'] },
+        BLR: { espnId: 2489, name: "Belarus", short: "BLR", group: "Group I (League C1)", groupOrder: 9, groupRank: 2, color: "#C8313E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/blr.png", xg: 1.38, xga: 0.82, shots: 12, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 2, gd: 3, pts: 7, espnRank: 34, form: ['D','L','D','W','W'] },
+        FIN: { espnId: 461, name: "Finland", short: "FIN", group: "Group I (League C1)", groupOrder: 9, groupRank: 3, color: "#003580", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fin.png", xg: 1.75, xga: 0.85, shots: 15, sot: 5, bigChances: 3, poss: 55, played: 4, gf: 9, ga: 2, gd: 7, pts: 7, espnRank: 35, form: ['L','W','D','W','L'] },
+        SMR: { espnId: 585, name: "San Marino", short: "SMR", group: "Group I (League C1)", groupOrder: 9, groupRank: 4, color: "#5EB6E4", logo: "https://a.espncdn.com/i/teamlogos/countries/500/smr.png", xg: 0.55, xga: 2.65, shots: 5, sot: 2, bigChances: 0, poss: 36, played: 4, gf: 1, ga: 16, gd: -15, pts: 0, espnRank: 36, form: ['L','L','L','L','L'] },
+
+        // Group J (League C2): Montenegro, Cyprus, Armenia, Latvia
+        MNE: { espnId: 6770, name: "Montenegro", short: "MNE", group: "Group J (League C2)", groupOrder: 10, groupRank: 1, color: "#C40308", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mne.png", xg: 1.68, xga: 0.98, shots: 14, sot: 5, bigChances: 2, poss: 52, played: 4, gf: 7, ga: 4, gd: 3, pts: 10, espnRank: 37, form: ['L','W','W','W','D'] },
+        CYP: { espnId: 582, name: "Cyprus", short: "CYP", group: "Group J (League C2)", groupOrder: 10, groupRank: 2, color: "#D57800", logo: "https://a.espncdn.com/i/teamlogos/countries/500/cyp.png", xg: 1.36, xga: 0.95, shots: 11, sot: 4, bigChances: 2, poss: 49, played: 4, gf: 5, ga: 3, gd: 2, pts: 7, espnRank: 38, form: ['L','L','D','W','W'] },
+        ARM: { espnId: 2484, name: "Armenia", short: "ARM", group: "Group J (League C2)", groupOrder: 10, groupRank: 3, color: "#D90012", logo: "https://a.espncdn.com/i/teamlogos/countries/500/arm.png", xg: 1.25, xga: 1.28, shots: 11, sot: 4, bigChances: 2, poss: 51, played: 4, gf: 4, ga: 5, gd: -1, pts: 4, espnRank: 39, form: ['W','W','L','L','D'] },
+        LVA: { espnId: 2488, name: "Latvia", short: "LVA", group: "Group J (League C2)", groupOrder: 10, groupRank: 4, color: "#9E3039", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lva.png", xg: 0.92, xga: 1.52, shots: 8, sot: 3, bigChances: 1, poss: 45, played: 4, gf: 2, ga: 6, gd: -4, pts: 1, espnRank: 40, form: ['L','L','D','L','L'] },
+
+        // Group K (League C3): Slovakia, Faroe Islands, Moldova, Kazakhstan
+        SVK: { espnId: 468, name: "Slovakia", short: "SVK", group: "Group K (League C3)", groupOrder: 11, groupRank: 1, color: "#0B4EA2", logo: "https://a.espncdn.com/i/teamlogos/countries/500/svk.png", xg: 1.92, xga: 0.78, shots: 15, sot: 6, bigChances: 3, poss: 57, played: 4, gf: 9, ga: 2, gd: 7, pts: 10, espnRank: 41, form: ['W','W','W','D','W'] },
+        FRO: { espnId: 2485, name: "Faroe Islands", short: "FRO", group: "Group K (League C3)", groupOrder: 11, groupRank: 2, color: "#0065BD", logo: "https://a.espncdn.com/i/teamlogos/countries/500/fro.png", xg: 1.22, xga: 1.22, shots: 10, sot: 4, bigChances: 1, poss: 46, played: 4, gf: 5, ga: 5, gd: 0, pts: 4, espnRank: 42, form: ['L','D','D','D','D'] },
+        MDA: { espnId: 2493, name: "Moldova", short: "MDA", group: "Group K (League C3)", groupOrder: 11, groupRank: 3, color: "#0046AE", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mda.png", xg: 1.05, xga: 1.68, shots: 9, sot: 3, bigChances: 1, poss: 44, played: 4, gf: 3, ga: 8, gd: -5, pts: 4, espnRank: 43, form: ['W','L','D','W','L'] },
+        KAZ: { espnId: 2504, name: "Kazakhstan", short: "KAZ", group: "Group K (League C3)", groupOrder: 11, groupRank: 4, color: "#00AFCA", logo: "https://a.espncdn.com/i/teamlogos/countries/500/kaz.png", xg: 1.18, xga: 1.48, shots: 10, sot: 3, bigChances: 1, poss: 48, played: 4, gf: 5, ga: 7, gd: -2, pts: 2, espnRank: 44, form: ['L','D','L','L','D'] },
+
+        // Group L (League C4): Iceland, Estonia, Bulgaria, Luxembourg
+        ISL: { espnId: 470, name: "Iceland", short: "ISL", group: "Group L (League C4)", groupOrder: 12, groupRank: 1, color: "#02529C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/isl.png", xg: 1.72, xga: 0.68, shots: 14, sot: 5, bigChances: 3, poss: 53, played: 4, gf: 7, ga: 1, gd: 6, pts: 8, espnRank: 45, form: ['L','D','W','W','D'] },
+        EST: { espnId: 2486, name: "Estonia", short: "EST", group: "Group L (League C4)", groupOrder: 12, groupRank: 2, color: "#0072CE", logo: "https://a.espncdn.com/i/teamlogos/countries/500/est.png", xg: 1.12, xga: 0.75, shots: 9, sot: 3, bigChances: 1, poss: 46, played: 4, gf: 2, ga: 1, gd: 1, pts: 6, espnRank: 46, form: ['L','D','D','W','D'] },
+        BUL: { espnId: 462, name: "Bulgaria", short: "BUL", group: "Group L (League C4)", groupOrder: 12, groupRank: 3, color: "#00966E", logo: "https://a.espncdn.com/i/teamlogos/countries/500/bul.png", xg: 1.15, xga: 1.32, shots: 10, sot: 3, bigChances: 1, poss: 49, played: 4, gf: 3, ga: 5, gd: -2, pts: 4, espnRank: 47, form: ['D','L','D','L','W'] },
+        LUX: { espnId: 584, name: "Luxembourg", short: "LUX", group: "Group L (League C4)", groupOrder: 12, groupRank: 4, color: "#00A3E0", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lux.png", xg: 0.92, xga: 1.56, shots: 8, sot: 3, bigChances: 1, poss: 47, played: 4, gf: 2, ga: 7, gd: -5, pts: 3, espnRank: 48, form: ['D','W','L','L','L'] },
+
+        // Group M (League D1): Malta, Gibraltar, Andorra
+        MLT: { espnId: 464, name: "Malta", short: "MLT", group: "Group M (League D1)", groupOrder: 13, groupRank: 1, color: "#CF142B", logo: "https://a.espncdn.com/i/teamlogos/countries/500/mlt.png", xg: 1.36, xga: 0.82, shots: 11, sot: 4, bigChances: 2, poss: 53, played: 3, gf: 4, ga: 2, gd: 2, pts: 7, espnRank: 49, form: ['W','D','W','D','W'] },
+        GIB: { espnId: 16898, name: "Gibraltar", short: "GIB", group: "Group M (League D1)", groupOrder: 13, groupRank: 2, color: "#DA291C", logo: "https://a.espncdn.com/i/teamlogos/countries/500/gib.png", xg: 0.96, xga: 0.96, shots: 8, sot: 3, bigChances: 1, poss: 47, played: 2, gf: 1, ga: 1, gd: 0, pts: 2, espnRank: 50, form: ['D','W','D','D','D'] },
+        AND: { espnId: 2494, name: "Andorra", short: "AND", group: "Group M (League D1)", groupOrder: 13, groupRank: 3, color: "#10069F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/and.png", xg: 0.78, xga: 1.28, shots: 7, sot: 2, bigChances: 1, poss: 42, played: 3, gf: 1, ga: 3, gd: -2, pts: 1, espnRank: 51, form: ['L','L','L','D','L'] },
+
+        // Group N (League D2): Azerbaijan, Lithuania, Liechtenstein
+        AZE: { espnId: 2491, name: "Azerbaijan", short: "AZE", group: "Group N (League D2)", groupOrder: 14, groupRank: 1, color: "#00B5E2", logo: "https://a.espncdn.com/i/teamlogos/countries/500/aze.png", xg: 1.28, xga: 0.85, shots: 11, sot: 4, bigChances: 2, poss: 53, played: 3, gf: 2, ga: 1, gd: 1, pts: 5, espnRank: 52, form: ['L','L','D','D','W'] },
+        LTU: { espnId: 2487, name: "Lithuania", short: "LTU", group: "Group N (League D2)", groupOrder: 14, groupRank: 2, color: "#FDB913", logo: "https://a.espncdn.com/i/teamlogos/countries/500/ltu.png", xg: 1.24, xga: 0.92, shots: 10, sot: 4, bigChances: 1, poss: 51, played: 3, gf: 3, ga: 2, gd: 1, pts: 4, espnRank: 53, form: ['L','L','W','D','L'] },
+        LIE: { espnId: 2492, name: "Liechtenstein", short: "LIE", group: "Group N (League D2)", groupOrder: 14, groupRank: 3, color: "#002B7F", logo: "https://a.espncdn.com/i/teamlogos/countries/500/lie.png", xg: 0.72, xga: 1.35, shots: 6, sot: 2, bigChances: 0, poss: 41, played: 2, gf: 0, ga: 2, gd: -2, pts: 1, espnRank: 54, form: ['D','L','D','L','D'] }
+    };
+
+    // Build all 6 Matchdays × 26 Intra-Group Matches (= 156 Group Stage Matches) for UEFA Nations League
+    function generateAll6MatchdaysUNL() {
+        const fourTeamGroups = [
+            { grp: 'Group A', teams: ['FRA', 'ITA', 'BEL', 'TUR'], dayOffset: 0 },
+            { grp: 'Group B', teams: ['NED', 'GRE', 'GER', 'SRB'], dayOffset: 1 },
+            { grp: 'Group C', teams: ['ESP', 'ENG', 'CRO', 'CZE'], dayOffset: 0 },
+            { grp: 'Group D', teams: ['POR', 'DEN', 'WAL', 'NOR'], dayOffset: 2 },
+            { grp: 'Group E', teams: ['SUI', 'SVN', 'SCO', 'MKD'], dayOffset: 1 },
+            { grp: 'Group F', teams: ['NIR', 'HUN', 'UKR', 'GEO'], dayOffset: 2 },
+            { grp: 'Group G', teams: ['AUT', 'KOS', 'IRL', 'ISR'], dayOffset: 2 },
+            { grp: 'Group H', teams: ['SWE', 'BIH', 'POL', 'ROU'], dayOffset: 2 },
+            { grp: 'Group I', teams: ['ALB', 'BLR', 'FIN', 'SMR'], dayOffset: 0 },
+            { grp: 'Group J', teams: ['MNE', 'CYP', 'ARM', 'LVA'], dayOffset: 0 },
+            { grp: 'Group K', teams: ['SVK', 'FRO', 'MDA', 'KAZ'], dayOffset: 1 },
+            { grp: 'Group L', teams: ['ISL', 'EST', 'BUL', 'LUX'], dayOffset: 1 }
+        ];
+        const threeTeamGroups = [
+            { grp: 'Group M', teams: ['MLT', 'GIB', 'AND'], dayOffset: 1 },
+            { grp: 'Group N', teams: ['AZE', 'LTU', 'LIE'], dayOffset: 1 }
+        ];
+
+        const mdBaseDates = {
+            UNL1: '2026-09-05',
+            UNL2: '2026-09-08',
+            UNL3: '2026-10-01',
+            UNL4: '2026-10-04',
+            UNL5: '2026-11-12',
+            UNL6: '2026-11-15'
+        };
+
+        // Round-robin pairings for a 4-team group [0, 1, 2, 3]:
+        // MD1: (0v1, 2v3), MD2: (1v2, 3v0), MD3: (0v2, 1v3), MD4: (1v0, 3v2), MD5: (3v2, 1v0), MD6: (0v3, 2v1)
+        const rr4 = {
+            UNL1: [[1, 0, 2, 1], [3, 2, 1, 1]],
+            UNL2: [[0, 2, 2, 0], [3, 1, 0, 2]],
+            UNL3: [[2, 0, 1, 2], [3, 1, 1, 1]],
+            UNL4: [[0, 2, 3, 1], [1, 3, 2, 0]],
+            UNL5: [[3, 2], [1, 0]],
+            UNL6: [[0, 3], [2, 1]]
+        };
+        const rr3 = {
+            UNL1: [0, 1, 2, 1],
+            UNL2: [1, 2, 1, 1],
+            UNL3: [2, 0, 0, 1],
+            UNL4: [1, 0, 1, 2],
+            UNL5: [2, 1],
+            UNL6: [0, 2]
+        };
+
+        const addDays = (isoDate, days, timeStr) => {
+            const d = new Date(`${isoDate}T${timeStr}Z`);
+            d.setUTCDate(d.getUTCDate() + days);
+            return d.toISOString();
+        };
+
+        const list = [];
+        ['UNL1', 'UNL2', 'UNL3', 'UNL4', 'UNL5', 'UNL6'].forEach(roundCode => {
+            const isPast = ['UNL1', 'UNL2', 'UNL3', 'UNL4'].includes(roundCode);
+            const baseDate = mdBaseDates[roundCode];
+
+            fourTeamGroups.forEach(({ grp, teams, dayOffset }) => {
+                const pairs = rr4[roundCode];
+                pairs.forEach((p, idx) => {
+                    const hCode = teams[p[0]];
+                    const aCode = teams[p[1]];
+                    const timeStr = idx === 0 ? '17:00:00' : '19:45:00';
+                    const utcIso = addDays(baseDate, dayOffset, timeStr);
+                    if (isPast) {
+                        const hScore = p[2] ?? 1;
+                        const aScore = p[3] ?? 1;
+                        list.push({
+                            round: roundCode,
+                            homeCode: hCode,
+                            awayCode: aCode,
+                            shortLabel: `${hCode} ${hScore}-${aScore} ${aCode}`,
+                            utcIso,
+                            status: 'FT',
+                            hScore,
+                            aScore,
+                            name: `${hCode} ${hScore} - ${aScore} ${aCode} (${roundCode} FT • ${grp})`,
+                            homeShots: 14,
+                            homeSot: 5,
+                            awayShots: 10,
+                            awaySot: 4,
+                            homePoss: 54
+                        });
+                    } else {
+                        list.push({
+                            round: roundCode,
+                            homeCode: hCode,
+                            awayCode: aCode,
+                            shortLabel: `${hCode} vs ${aCode}`,
+                            utcIso,
+                            status: roundCode,
+                            name: `${hCode} vs ${aCode} (${roundCode} • ${grp})`,
+                            homeShots: 0,
+                            homeSot: 0,
+                            awayShots: 0,
+                            awaySot: 0,
+                            homePoss: 0
+                        });
+                    }
+                });
+            });
+
+            threeTeamGroups.forEach(({ grp, teams, dayOffset }) => {
+                const p = rr3[roundCode];
+                const hCode = teams[p[0]];
+                const aCode = teams[p[1]];
+                const utcIso = addDays(baseDate, dayOffset, '19:45:00');
+                if (isPast) {
+                    const hScore = p[2] ?? 1;
+                    const aScore = p[3] ?? 0;
+                    list.push({
+                        round: roundCode,
+                        homeCode: hCode,
+                        awayCode: aCode,
+                        shortLabel: `${hCode} ${hScore}-${aScore} ${aCode}`,
+                        utcIso,
+                        status: 'FT',
+                        hScore,
+                        aScore,
+                        name: `${hCode} ${hScore} - ${aScore} ${aCode} (${roundCode} FT • ${grp})`,
+                        homeShots: 11,
+                        homeSot: 4,
+                        awayShots: 8,
+                        awaySot: 3,
+                        homePoss: 52
+                    });
+                } else {
+                    list.push({
+                        round: roundCode,
+                        homeCode: hCode,
+                        awayCode: aCode,
+                        shortLabel: `${hCode} vs ${aCode}`,
+                        utcIso,
+                        status: roundCode,
+                        name: `${hCode} vs ${aCode} (${roundCode} • ${grp})`,
+                        homeShots: 0,
+                        homeSot: 0,
+                        awayShots: 0,
+                        awaySot: 0,
+                        homePoss: 0
+                    });
+                }
+            });
+        });
+
+        return list;
+    }
+
     const leagueFixturesData = {
         PL: [
             { round: 'MW9', homeCode: 'NEW', awayCode: 'EVE', shortLabel: 'NEW 0-1 EVE', utcIso: '2026-11-02T20:00:00Z', status: 'FT', hScore: 0, aScore: 1, name: 'NEW 0 - 1 EVE (MW9 FT)', homeShots: 14, homeSot: 4, awayShots: 11, awaySot: 5, homePoss: 54 },
             { round: 'MW9', homeCode: 'LIV', awayCode: 'ARS', shortLabel: 'LIV 2-1 ARS', utcIso: '2026-11-01T16:30:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'LIV 2 - 1 ARS (MW9 FT)', homeShots: 16, homeSot: 6, awayShots: 13, awaySot: 4, homePoss: 53 },
-            { round: 'MW10', featured: true, homeCode: 'EVE', awayCode: 'COV', shortLabel: '⭐ EVE vs COV', utcIso: '2026-11-06T20:00:00Z', status: 'MW10', name: '⭐ EVE vs COV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'LEE', awayCode: 'TOT', shortLabel: '⭐ LEE vs TOT', utcIso: '2026-11-07T12:30:00Z', status: 'MW10', name: '⭐ LEE vs TOT (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'ARS', awayCode: 'HUL', shortLabel: '⭐ ARS vs HUL', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: '⭐ ARS vs HUL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'EVE', awayCode: 'COV', shortLabel: 'EVE vs COV', utcIso: '2026-11-06T20:00:00Z', status: 'MW10', name: 'EVE vs COV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'LEE', awayCode: 'TOT', shortLabel: 'LEE vs TOT', utcIso: '2026-11-07T12:30:00Z', status: 'MW10', name: 'LEE vs TOT (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'ARS', awayCode: 'HUL', shortLabel: 'ARS vs HUL', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: 'ARS vs HUL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
             { round: 'MW10', homeCode: 'FUL', awayCode: 'NEW', shortLabel: 'FUL vs NEW', utcIso: '2026-11-07T15:00:00Z', status: 'MW10', name: 'FUL vs NEW (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'NFO', awayCode: 'MCI', shortLabel: '⭐ NFO vs MCI', utcIso: '2026-11-07T17:30:00Z', status: 'MW10', name: '⭐ NFO vs MCI (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'NFO', awayCode: 'MCI', shortLabel: 'NFO vs MCI', utcIso: '2026-11-07T17:30:00Z', status: 'MW10', name: 'NFO vs MCI (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
             { round: 'MW10', homeCode: 'BHA', awayCode: 'BRE', shortLabel: 'BHA vs BRE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'BHA vs BRE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'CRY', awayCode: 'LIV', shortLabel: '⭐ CRY vs LIV', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: '⭐ CRY vs LIV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'CRY', awayCode: 'LIV', shortLabel: 'CRY vs LIV', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'CRY vs LIV (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
             { round: 'MW10', homeCode: 'IPS', awayCode: 'BOU', shortLabel: 'IPS vs BOU', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'IPS vs BOU (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'SUN', awayCode: 'CHE', shortLabel: '⭐ SUN vs CHE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: '⭐ SUN vs CHE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'MW10', featured: true, homeCode: 'MUN', awayCode: 'AVL', shortLabel: '⭐ MUN vs AVL', utcIso: '2026-11-08T16:30:00Z', status: 'MW10', name: '⭐ MUN vs AVL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+            { round: 'MW10', homeCode: 'SUN', awayCode: 'CHE', shortLabel: 'SUN vs CHE', utcIso: '2026-11-08T14:00:00Z', status: 'MW10', name: 'SUN vs CHE (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MW10', homeCode: 'MUN', awayCode: 'AVL', shortLabel: 'MUN vs AVL', utcIso: '2026-11-08T16:30:00Z', status: 'MW10', name: 'MUN vs AVL (MW10)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
         ],
-        LALIGA: [],
+        LALIGA: [
+            { round: 'MD12', homeCode: 'ESP', awayCode: 'DEP', shortLabel: 'ESP vs DEP', utcIso: '2026-11-06T20:00:00Z', status: 'MD12', name: 'ESP vs DEP (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'RMA', awayCode: 'OSA', shortLabel: 'RMA vs OSA', utcIso: '2026-11-07T13:00:00Z', status: 'MD12', name: 'RMA vs OSA (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'VIL', awayCode: 'ALA', shortLabel: 'VIL vs ALA', utcIso: '2026-11-07T15:15:00Z', status: 'MD12', name: 'VIL vs ALA (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'MAL', awayCode: 'RAC', shortLabel: 'MAL vs RAC', utcIso: '2026-11-07T17:30:00Z', status: 'MD12', name: 'MAL vs RAC (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'LEV', awayCode: 'SEV', shortLabel: 'LEV vs SEV', utcIso: '2026-11-07T20:00:00Z', status: 'MD12', name: 'LEV vs SEV (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'BET', awayCode: 'CEL', shortLabel: 'BET vs CEL', utcIso: '2026-11-08T13:00:00Z', status: 'MD12', name: 'BET vs CEL (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'MLL', awayCode: 'ATM', shortLabel: 'MLL vs ATM', utcIso: '2026-11-08T15:15:00Z', status: 'MD12', name: 'MLL vs ATM (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'GIR', awayCode: 'ATH', shortLabel: 'GIR vs ATH', utcIso: '2026-11-08T17:30:00Z', status: 'MD12', name: 'GIR vs ATH (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'RAY', awayCode: 'VAL', shortLabel: 'RAY vs VAL', utcIso: '2026-11-08T17:30:00Z', status: 'MD12', name: 'RAY vs VAL (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'MD12', homeCode: 'RSO', awayCode: 'BAR', shortLabel: 'RSO vs BAR', utcIso: '2026-11-08T20:00:00Z', status: 'MD12', name: 'RSO vs BAR (MD12)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+        ],
         UCL: [
-            { round: 'UCL4', homeCode: 'GAL', awayCode: 'STU', shortLabel: 'GAL 2-1 STU', utcIso: '2026-11-03T17:45:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'GAL 2 - 1 STU (UCL MD4 FT)', homeShots: 14, homeSot: 5, awayShots: 11, awaySot: 4, homePoss: 52 },
-            { round: 'UCL4', homeCode: 'SHK', awayCode: 'SCP', shortLabel: 'SHK 1-2 SCP', utcIso: '2026-11-03T17:45:00Z', status: 'FT', hScore: 1, aScore: 2, name: 'SHK 1 - 2 SCP (UCL MD4 FT)', homeShots: 10, homeSot: 3, awayShots: 15, awaySot: 6, homePoss: 46 },
-            { round: 'UCL4', featured: true, homeCode: 'ATM', awayCode: 'BAY', shortLabel: 'ATM 1-1 BAY', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 1, name: 'ATM 1 - 1 BAY (UCL MD4 FT)', homeShots: 12, homeSot: 4, awayShots: 16, awaySot: 6, homePoss: 43 },
-            { round: 'UCL4', featured: true, homeCode: 'BAR', awayCode: 'AVL', shortLabel: 'BAR 3-1 AVL', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 3, aScore: 1, name: 'BAR 3 - 1 AVL (UCL MD4 FT)', homeShots: 18, homeSot: 7, awayShots: 9, awaySot: 3, homePoss: 63 },
-            { round: 'UCL4', featured: true, homeCode: 'VIL', awayCode: 'PSG', shortLabel: 'VIL 1-2 PSG', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 2, name: 'VIL 1 - 2 PSG (UCL MD4 FT)', homeShots: 11, homeSot: 4, awayShots: 17, awaySot: 7, homePoss: 41 },
-            { round: 'UCL4', featured: true, homeCode: 'MUN', awayCode: 'ROM', shortLabel: 'MUN 2-1 ROM', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 2, aScore: 1, name: 'MUN 2 - 1 ROM (UCL MD4 FT)', homeShots: 15, homeSot: 5, awayShots: 12, awaySot: 4, homePoss: 54 },
-            { round: 'UCL4', featured: true, homeCode: 'FEY', awayCode: 'INT', shortLabel: 'FEY 0-2 INT', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 0, aScore: 2, name: 'FEY 0 - 2 INT (UCL MD4 FT)', homeShots: 9, homeSot: 2, awayShots: 14, awaySot: 6, homePoss: 47 },
-            { round: 'UCL4', homeCode: 'BOD', awayCode: 'LIL', shortLabel: 'BOD 1-1 LIL', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 1, aScore: 1, name: 'BOD 1 - 1 LIL (UCL MD4 FT)', homeShots: 11, homeSot: 4, awayShots: 12, awaySot: 4, homePoss: 49 },
-            { round: 'UCL4', homeCode: 'LASK', awayCode: 'SLO', shortLabel: 'LASK 2-0 SLO', utcIso: '2026-11-03T20:00:00Z', status: 'FT', hScore: 2, aScore: 0, name: 'LASK 2 - 0 SLO (UCL MD4 FT)', homeShots: 14, homeSot: 5, awayShots: 7, awaySot: 2, homePoss: 56 },
-            { round: 'UCL4', featured: true, homeCode: 'FEN', awayCode: 'LIV', shortLabel: '⭐ FEN vs LIV', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: '⭐ FEN vs LIV (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', featured: true, homeCode: 'AEK', awayCode: 'RMA', shortLabel: '⭐ AEK vs RMA', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: '⭐ AEK vs RMA (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', featured: true, homeCode: 'RBL', awayCode: 'MCI', shortLabel: '⭐ RBL vs MCI', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ RBL vs MCI (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', featured: true, homeCode: 'DOR', awayCode: 'BET', shortLabel: '⭐ DOR vs BET', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ DOR vs BET (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', featured: true, homeCode: 'SLA', awayCode: 'ARS', shortLabel: '⭐ SLA vs ARS', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: '⭐ SLA vs ARS (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', homeCode: 'POR', awayCode: 'NAP', shortLabel: 'POR vs NAP', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'POR vs NAP (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', homeCode: 'PSV', awayCode: 'BRU', shortLabel: 'PSV vs BRU', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'PSV vs BRU (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', homeCode: 'LEN', awayCode: 'COM', shortLabel: 'LEN vs COM', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'LEN vs COM (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
-            { round: 'UCL4', homeCode: 'VIK', awayCode: 'SAB', shortLabel: 'VIK vs SAB', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'VIK vs SAB (UCL MD4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
-        ]
+            { round: 'UCL4', homeCode: 'FEN', awayCode: 'LIV', shortLabel: 'FEN vs LIV', utcIso: '2026-11-03T17:45:00Z', status: 'UCL4', name: 'FEN vs LIV (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'PSV', awayCode: 'SHK', shortLabel: 'PSV vs SHK', utcIso: '2026-11-03T17:45:00Z', status: 'UCL4', name: 'PSV vs SHK (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'AEK', awayCode: 'RMA', shortLabel: 'AEK vs RMA', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'AEK vs RMA (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'RBL', awayCode: 'MCI', shortLabel: 'RBL vs MCI', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'RBL vs MCI (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'DOR', awayCode: 'POR', shortLabel: 'DOR vs POR', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'DOR vs POR (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'LIL', awayCode: 'ROM', shortLabel: 'LIL vs ROM', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'LIL vs ROM (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'SCP', awayCode: 'BET', shortLabel: 'SCP vs BET', utcIso: '2026-11-03T20:00:00Z', status: 'UCL4', name: 'SCP vs BET (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'BRU', awayCode: 'AVL', shortLabel: 'BRU vs AVL', utcIso: '2026-11-04T17:45:00Z', status: 'UCL4', name: 'BRU vs AVL (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'INT', awayCode: 'ARS', shortLabel: 'INT vs ARS', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'INT vs ARS (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'PSG', awayCode: 'ATM', shortLabel: 'PSG vs ATM', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'PSG vs ATM (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'BAY', awayCode: 'FEY', shortLabel: 'BAY vs FEY', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'BAY vs FEY (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 },
+            { round: 'UCL4', homeCode: 'BAR', awayCode: 'GAL', shortLabel: 'BAR vs GAL', utcIso: '2026-11-04T20:00:00Z', status: 'UCL4', name: 'BAR vs GAL (UCL4)', homeShots: 0, homeSot: 0, awayShots: 0, awaySot: 0, homePoss: 0 }
+        ],
+        UNL: generateAll6MatchdaysUNL()
     };
 
-    const topClubs = new Set(['MCI', 'ARS', 'LIV', 'CHE', 'TOT', 'NEW', 'BAR', 'RMA', 'ATM', 'BAY', 'INT', 'PSG', 'AVL', 'VIL', 'DOR', 'EVE', 'RSO', 'BET', 'ATH', 'SEV', 'MAL', 'RAC', 'DEP', 'ESP']);
-
     function sortFixturesChronologically(list) {
-        return [...list].sort((a, b) => {
+        return [...(list || [])].sort((a, b) => {
             const tA = a.utcIso ? new Date(a.utcIso).getTime() : Number.MAX_SAFE_INTEGER;
             const tB = b.utcIso ? new Date(b.utcIso).getTime() : Number.MAX_SAFE_INTEGER;
             if (tA !== tB) return tA - tB;
-            if ((b.featured ? 1 : 0) !== (a.featured ? 1 : 0)) {
-                return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
-            }
             return (a.homeCode || '').localeCompare(b.homeCode || '');
         });
     }
@@ -198,6 +427,62 @@
     function matchTeamNameToCode(rawName) {
         if (!rawName) return null;
         const n = rawName.toLowerCase();
+        // National teams (UNL)
+        if (n === 'france') return 'FRA';
+        if (n === 'italy') return 'ITA';
+        if (n === 'belgium') return 'BEL';
+        if (n.includes('türkiye') || n.includes('turkey')) return 'TUR';
+        if (n === 'netherlands' || n === 'holland') return 'NED';
+        if (n === 'greece') return 'GRE';
+        if (n === 'germany') return 'GER';
+        if (n === 'serbia') return 'SRB';
+        if (n === 'spain') return 'ESP';
+        if (n === 'england') return 'ENG';
+        if (n === 'croatia') return 'CRO';
+        if (n.includes('czech')) return 'CZE';
+        if (n === 'portugal') return 'POR';
+        if (n === 'denmark') return 'DEN';
+        if (n === 'wales') return 'WAL';
+        if (n === 'norway') return 'NOR';
+        if (n === 'switzerland') return 'SUI';
+        if (n === 'slovenia') return 'SVN';
+        if (n === 'scotland') return 'SCO';
+        if (n.includes('macedonia')) return 'MKD';
+        if (n.includes('northern ireland')) return 'NIR';
+        if (n === 'hungary') return 'HUN';
+        if (n === 'ukraine') return 'UKR';
+        if (n === 'georgia') return 'GEO';
+        if (n === 'austria') return 'AUT';
+        if (n === 'kosovo') return 'KOS';
+        if (n.includes('republic of ireland') || n === 'ireland') return 'IRL';
+        if (n === 'israel') return 'ISR';
+        if (n === 'sweden') return 'SWE';
+        if (n.includes('bosnia')) return 'BIH';
+        if (n === 'poland') return 'POL';
+        if (n === 'romania') return 'ROU';
+        if (n === 'albania') return 'ALB';
+        if (n === 'belarus') return 'BLR';
+        if (n === 'finland') return 'FIN';
+        if (n.includes('san marino')) return 'SMR';
+        if (n === 'montenegro') return 'MNE';
+        if (n === 'cyprus') return 'CYP';
+        if (n === 'armenia') return 'ARM';
+        if (n === 'latvia') return 'LVA';
+        if (n === 'slovakia') return 'SVK';
+        if (n.includes('faroe')) return 'FRO';
+        if (n === 'moldova') return 'MDA';
+        if (n === 'kazakhstan') return 'KAZ';
+        if (n === 'iceland') return 'ISL';
+        if (n === 'estonia') return 'EST';
+        if (n === 'bulgaria') return 'BUL';
+        if (n === 'luxembourg') return 'LUX';
+        if (n === 'malta') return 'MLT';
+        if (n === 'gibraltar') return 'GIB';
+        if (n === 'andorra') return 'AND';
+        if (n === 'azerbaijan') return 'AZE';
+        if (n === 'lithuania') return 'LTU';
+        if (n === 'liechtenstein') return 'LIE';
+        // Club teams
         if (n.includes('villarreal')) return 'VIL';
         if (n.includes('aston villa')) return 'AVL';
         if (n.includes('manchester city') || n.includes('man city')) return 'MCI';
@@ -219,12 +504,6 @@
         if (n.includes('hull')) return 'HUL';
         if (n.includes('ipswich')) return 'IPS';
         if (n.includes('sunderland')) return 'SUN';
-        if (n.includes('wolverhampton') || n.includes('wolves')) return 'WOL';
-        if (n.includes('west ham')) return 'WHU';
-        if (n.includes('leicester')) return 'LEI';
-        if (n.includes('southampton')) return 'SOU';
-        if (n.includes('burnley')) return 'BUR';
-        if (n.includes('sheffield')) return 'SHU';
         if (n.includes('barcelona') || n.includes('barça')) return 'BAR';
         if (n.includes('real madrid')) return 'RMA';
         if (n.includes('atletico') || n.includes('atlético')) return 'ATM';
@@ -235,207 +514,74 @@
         if (n.includes('sevilla')) return 'SEV';
         if (n.includes('girona')) return 'GIR';
         if (n.includes('valencia')) return 'VAL';
-        if (n.includes('valladolid')) return 'VLL';
         if (n.includes('racing') || n.includes('santander')) return 'RAC';
         if (n.includes('malaga') || n.includes('málaga')) return 'MAL';
-        if (n.includes('alaves') || n.includes('alavés')) return 'ALA';
-        if (n.includes('deportivo') || n.includes('coruna') || n.includes('coruña')) return 'DEP';
-        if (n.includes('castellon') || n.includes('castellón')) return 'CAS';
-        if (n.includes('cordoba') || n.includes('córdoba')) return 'COR';
-        if (n.includes('almeria') || n.includes('almería')) return 'ALM';
-        if (n.includes('granada')) return 'GRA';
-        if (n.includes('cadiz') || n.includes('cádiz')) return 'CAD';
-        if (n.includes('zaragoza')) return 'ZAR';
+        if (n.includes('deportivo la coruna') || n.includes('deportivo')) return 'DEP';
         if (n.includes('celta')) return 'CEL';
         if (n.includes('mallorca')) return 'MLL';
         if (n.includes('rayo') || n.includes('vallecano')) return 'RAY';
-        if (n.includes('getafe')) return 'GET';
+        if (n.includes('alaves') || n.includes('alavés')) return 'ALA';
         if (n.includes('espanyol')) return 'ESP';
-        if (n.includes('leganes') || n.includes('leganés')) return 'LEG';
-        if (n.includes('las palmas')) return 'LPA';
-        if (n.includes('oviedo')) return 'OVI';
         if (n.includes('levante')) return 'LEV';
-        if (n.includes('elche')) return 'ELC';
-        if (n.includes('bayern')) return 'BAY';
-        if (n.includes('inter') || n.includes('internazionale')) return 'INT';
-        if (n.includes('paris') || n.includes('psg')) return 'PSG';
-        if (n.includes('dortmund')) return 'DOR';
-        if (n.includes('stuttgart')) return 'STU';
-        if (n.includes('psv')) return 'PSV';
-        if (n.includes('como')) return 'COM';
-        if (n.includes('galatasaray')) return 'GAL';
-        if (n.includes('napoli')) return 'NAP';
-        if (n.includes('brugge')) return 'BRU';
-        if (n.includes('lask')) return 'LASK';
-        if (n.includes('roma')) return 'ROM';
-        if (n.includes('shakhtar')) return 'SHK';
-        if (n.includes('sporting')) return 'SCP';
-        if (n.includes('lens')) return 'LEN';
-        if (n.includes('aek')) return 'AEK';
-        if (n.includes('feyenoord')) return 'FEY';
-        if (n.includes('porto')) return 'POR';
-        if (n.includes('leipzig')) return 'RBL';
-        if (n.includes('lille')) return 'LIL';
-        if (n.includes('fenerbahce') || n.includes('fenerbahçe')) return 'FEN';
-        if (n.includes('slavia')) return 'SLA';
-        if (n.includes('bodo') || n.includes('bodø') || n.includes('glimt')) return 'BOD';
-        if (n.includes('viking')) return 'VIK';
-        if (n.includes('slovan') || n.includes('bratislava')) return 'SLO';
-        if (n.includes('sabah')) return 'SAB';
         return null;
     }
 
-    function resolveOrRegisterTeamFromESPN(teamObj, targetTeamsMap, allowRegisterNew = true) {
-        if (!teamObj) return null;
-        const rawName = teamObj.displayName || teamObj.name || '';
-        let code = matchTeamNameToCode(rawName);
-        if (!code && teamObj.abbreviation) {
-            code = teamObj.abbreviation.toUpperCase().slice(0, 4);
-        }
-        if (!code) {
-            code = rawName.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3) || 'CLB';
-        }
-        if (!targetTeamsMap[code]) {
-            if (!allowRegisterNew) return null;
-            targetTeamsMap[code] = {
-                espnId: teamObj.id ? Number(teamObj.id) : null,
-                name: rawName || code,
-                short: code,
-                color: teamObj.color ? `#${teamObj.color}` : '#00ff85',
-                logo: teamObj.logos?.[0]?.href || teamObj.logo || '',
-                xg: 1.38,
-                xga: 1.35,
-                shots: 12,
-                sot: 4,
-                bigChances: 2,
-                poss: 50,
-                played: 11,
-                gf: 12,
-                ga: 13,
-                pts: 12,
-                form: ['W', 'D', 'L', 'D', 'W']
-            };
-        } else {
-            if (teamObj.id) targetTeamsMap[code].espnId = Number(teamObj.id);
-            if (teamObj.logos?.[0]?.href) targetTeamsMap[code].logo = teamObj.logos[0].href;
-            else if (teamObj.logo) targetTeamsMap[code].logo = teamObj.logo;
-            if (rawName) targetTeamsMap[code].name = rawName;
-        }
-        return code;
-    }
-
-    function ensureCompleteRoundMatches(primaryMatches, seedMatches, targetTeams, roundCode, matchesPerRound = 10, allowSyntheticFill = false) {
-        const result = [];
-        const usedClubs = new Set();
-
-        (primaryMatches || []).forEach(fix => {
-            if (!fix || !fix.homeCode || !fix.awayCode) return;
-            if (result.length >= matchesPerRound) return;
-            if (!usedClubs.has(fix.homeCode) && !usedClubs.has(fix.awayCode)) {
-                result.push({ ...fix, round: roundCode });
-                usedClubs.add(fix.homeCode);
-                usedClubs.add(fix.awayCode);
-            }
-        });
-
-        (seedMatches || []).forEach(seedFix => {
-            if (result.length >= matchesPerRound) return;
-            if (!seedFix || !seedFix.homeCode || !seedFix.awayCode) return;
-            if (targetTeams[seedFix.homeCode] && targetTeams[seedFix.awayCode]) {
-                if (!usedClubs.has(seedFix.homeCode) && !usedClubs.has(seedFix.awayCode)) {
-                    result.push({ ...seedFix, round: roundCode });
-                    usedClubs.add(seedFix.homeCode);
-                    usedClubs.add(seedFix.awayCode);
-                }
-            }
-        });
-
-        if (allowSyntheticFill && result.length < matchesPerRound) {
-            const unusedClubCodes = Object.keys(targetTeams).filter(code => !usedClubs.has(code));
-            let slotIdx = 0;
-            for (let i = 0; i + 1 < unusedClubCodes.length && result.length < matchesPerRound; i += 2) {
-                const hCode = unusedClubCodes[i];
-                const aCode = unusedClubCodes[i + 1];
-                const isFeatured = topClubs.has(hCode) || topClubs.has(aCode);
-                const fallbackSlots = [
-                    '2026-11-07T15:15:00Z',
-                    '2026-11-09T20:00:00Z',
-                    '2026-11-08T13:00:00Z',
-                    '2026-11-08T15:15:00Z'
-                ];
-                const utcIso = fallbackSlots[slotIdx % fallbackSlots.length];
-                slotIdx++;
-
-                const shortLabel = `${isFeatured ? '⭐ ' : ''}${hCode} vs ${aCode}`;
-                result.push({
-                    round: roundCode,
-                    featured: isFeatured,
-                    homeCode: hCode,
-                    awayCode: aCode,
-                    shortLabel,
-                    utcIso,
-                    status: roundCode,
-                    name: `${shortLabel} (${roundCode})`,
-                    homeShots: 0,
-                    homeSot: 0,
-                    awayShots: 0,
-                    awaySot: 0,
-                    homePoss: 0
-                });
-                usedClubs.add(hCode);
-                usedClubs.add(aCode);
-            }
-        }
-
-        return sortFixturesChronologically(result);
-    }
-
     const FootballDB = {
-        DB_VERSION: '2026.11.v33.espn_38gw_exact',
-        STORAGE_KEY: 'football_prediction_engine_espn_db_v33',
+        DB_VERSION: '2026.11.v43.unl_all_6_matchdays_156_fixtures',
+        STORAGE_KEY: 'football_prediction_engine_espn_db_v43',
         state: null,
         lastRawESPNFixtureSample: null,
-        leagueConfigs,
-        plTeamsData,
-        laLigaTeamsData,
-        uclTeamsData,
-        leagueFixturesData,
-        sortFixturesChronologically,
-        ensureCompleteRoundMatches,
-        matchTeamNameToCode,
-        resolveOrRegisterTeamFromESPN,
-        parseFormString,
+        seedData: {
+            plTeamsData,
+            laLigaTeamsData,
+            uclTeamsData,
+            unlTeamsData,
+            leagueFixturesData
+        },
 
         buildStandingsSnapshot(teamsObj) {
-            const codes = Object.keys(teamsObj);
+            const codes = Object.keys(teamsObj || {});
             const totalTeams = Math.max(2, codes.length);
             const rows = codes.map(code => {
                 const t = teamsObj[code];
                 const played = Math.max(1, t.played || 1);
-                const gf = t.gf ?? Math.round(t.xg * played);
-                const ga = t.ga ?? Math.round(t.xga * played);
+                const gf = t.gf ?? Math.round((t.xg || 1.3) * played);
+                const ga = t.ga ?? Math.round((t.xga || 1.2) * played);
                 const gd = (t.gd !== undefined) ? t.gd : (gf - ga);
                 const pts = t.pts ?? Math.round(played * 1.4);
                 const ppg = Number((pts / played).toFixed(2));
                 const espnRank = t.espnRank ? Number(t.espnRank) : null;
-                return { code, name: t.name, played, gf, ga, gd, pts, ppg, espnRank, xg: t.xg, form: t.form };
+                return {
+                    code,
+                    name: t.name,
+                    group: t.group || null,
+                    groupOrder: t.groupOrder || 99,
+                    groupRank: t.groupRank || null,
+                    played,
+                    gf,
+                    ga,
+                    gd,
+                    pts,
+                    ppg,
+                    espnRank,
+                    xg: t.xg,
+                    form: t.form
+                };
             }).sort((a, b) => {
-                if (a.espnRank !== null && b.espnRank !== null && a.espnRank !== b.espnRank) {
-                    return a.espnRank - b.espnRank;
-                }
+                if (a.groupOrder !== b.groupOrder) return a.groupOrder - b.groupOrder;
+                if (a.groupRank !== null && b.groupRank !== null && a.groupRank !== b.groupRank) return a.groupRank - b.groupRank;
+                if (a.espnRank !== null && b.espnRank !== null && a.espnRank !== b.espnRank) return a.espnRank - b.espnRank;
                 if (b.pts !== a.pts) return b.pts - a.pts;
                 if (b.gd !== a.gd) return b.gd - a.gd;
-                if (b.gf !== a.gf) return b.gf - a.gf;
-                return (b.xg || 0) - (a.xg || 0);
+                return b.gf - a.gf;
             });
 
             rows.forEach((r, idx) => {
-                const rank = r.espnRank || (idx + 1);
+                const rank = r.groupRank || r.espnRank || (idx + 1);
                 r.rank = rank;
                 const rankPct = (totalTeams - idx) / Math.max(1, totalTeams - 1);
                 const ppgNorm = Math.min(1, r.ppg / 2.6);
                 r.strengthIndex = Math.round((rankPct * 65 + ppgNorm * 35));
-
                 if (teamsObj[r.code]) {
                     teamsObj[r.code].rank = rank;
                     teamsObj[r.code].gd = r.gd;
@@ -462,6 +608,7 @@
             const plCopy = JSON.parse(JSON.stringify(plTeamsData));
             const laLigaCopy = JSON.parse(JSON.stringify(laLigaTeamsData));
             const uclCopy = JSON.parse(JSON.stringify(uclTeamsData));
+            const unlCopy = JSON.parse(JSON.stringify(unlTeamsData));
 
             this.state = {
                 version: this.DB_VERSION,
@@ -469,7 +616,7 @@
                     PL: {
                         teams: plCopy,
                         standings: this.buildStandingsSnapshot(plCopy),
-                        fixtures: [...leagueFixturesData.PL],
+                        fixtures: JSON.parse(JSON.stringify(leagueFixturesData.PL)),
                         fullSeasonSeededFromESPN: false,
                         formSeededFromESPN: false,
                         lastSyncedAt: new Date().toISOString()
@@ -477,7 +624,7 @@
                     LALIGA: {
                         teams: laLigaCopy,
                         standings: this.buildStandingsSnapshot(laLigaCopy),
-                        fixtures: [...leagueFixturesData.LALIGA],
+                        fixtures: JSON.parse(JSON.stringify(leagueFixturesData.LALIGA)),
                         fullSeasonSeededFromESPN: false,
                         formSeededFromESPN: false,
                         lastSyncedAt: new Date().toISOString()
@@ -485,7 +632,15 @@
                     UCL: {
                         teams: uclCopy,
                         standings: this.buildStandingsSnapshot(uclCopy),
-                        fixtures: [...leagueFixturesData.UCL],
+                        fixtures: JSON.parse(JSON.stringify(leagueFixturesData.UCL)),
+                        fullSeasonSeededFromESPN: false,
+                        formSeededFromESPN: false,
+                        lastSyncedAt: new Date().toISOString()
+                    },
+                    UNL: {
+                        teams: unlCopy,
+                        standings: this.buildStandingsSnapshot(unlCopy),
+                        fixtures: JSON.parse(JSON.stringify(leagueFixturesData.UNL)),
                         fullSeasonSeededFromESPN: false,
                         formSeededFromESPN: false,
                         lastSyncedAt: new Date().toISOString()
@@ -506,10 +661,12 @@
             return this.state.leagues[leagueKey];
         },
 
-        getRoundFixtures(leagueKey, roundCode) {
-            const league = this.getLeague(leagueKey);
-            if (!league || !league.fixtures) return [];
-            return sortFixturesChronologically(league.fixtures.filter(f => f.round === roundCode));
+        purgeLeagueFixtures(leagueKey) {
+            if (!this.state) this.init();
+            if (this.state.leagues[leagueKey]) {
+                this.state.leagues[leagueKey].fixtures = [];
+                this.state.leagues[leagueKey].fullSeasonSeededFromESPN = false;
+            }
         },
 
         saveLeague(leagueKey, teamsObj, fixturesArr, markSeeded = true) {
@@ -528,292 +685,166 @@
             this.save();
         },
 
-        /**
-         * Purges cached fixtures for a specific league & round (or entire league) before fresh ESPN ingestion
-         */
-        purgeLeagueFixtures(leagueKey, roundCode = null) {
-            if (!this.state) this.init();
-            const lg = this.state.leagues[leagueKey];
-            if (!lg) return;
-            if (roundCode) {
-                lg.fixtures = (lg.fixtures || []).filter(f => f.round !== roundCode);
-            } else {
-                lg.fixtures = [];
-            }
-            lg.fullSeasonSeededFromESPN = false;
-            this.save();
-        },
-
-        /**
-         * AUTHORITATIVE ESPN API → FOOTBALLDB INGESTION ENGINE (`FootballDB.syncFromESPN`)
-         * Step 1: Purges any stale/fallback fixtures when syncing from ESPN.
-         * Step 2: Downloads official 20-club table from `/standings`.
-         * Step 3: Downloads all 20 clubs' 38-match schedules from `/teams/{id}/schedule` AND
-         *         assigns each club's N-th chronological league match (`idx + 1`) to Round `N` (`MD1`..`MD38`),
-         *         plus identifies each club's immediate next unplayed match for the active Matchday!
-         * Step 4: Downloads active `/scoreboard` to pin current Matchday live status & times.
-         * Step 5: Persists everything into `FootballDB` (`localStorage` + exportable `football_db.js`).
-         */
         async syncFromESPN(leagueKey, forceRefresh = false) {
-            const dbLeague = this.getLeague(leagueKey);
-            if (!dbLeague) return null;
-
+            if (!this.state) this.init();
             const cfg = leagueConfigs[leagueKey];
-            let activeRound = cfg.activeRound;
-            const cachedRoundMatches = (dbLeague.fixtures || []).filter(f => f.round === activeRound);
+            const dbLeague = this.getLeague(leagueKey);
+            if (!cfg || !dbLeague) return { changed: false };
 
-            if (dbLeague.fullSeasonSeededFromESPN && !forceRefresh && cachedRoundMatches.length >= cfg.matchesPerRound) {
-                return {
-                    teams: dbLeague.teams,
-                    fixtures: dbLeague.fixtures,
-                    activeRound,
-                    fromCache: true
-                };
-            }
+            let targetTeams = JSON.parse(JSON.stringify(
+                (dbLeague.teams && Object.keys(dbLeague.teams).length > 0)
+                    ? dbLeague.teams
+                    : (leagueKey === 'UNL' ? unlTeamsData : (leagueKey === 'LALIGA' ? laLigaTeamsData : (leagueKey === 'UCL' ? uclTeamsData : plTeamsData)))
+            ));
 
-            // PURGE FIRST: Clear stale fixtures for La Liga (or when forceRefresh is triggered) before writing from ESPN
-            if (leagueKey === 'LALIGA' || forceRefresh) {
-                this.purgeLeagueFixtures(leagueKey);
-            }
-
-            let targetTeams = JSON.parse(JSON.stringify(dbLeague.teams));
             const espnIdToCode = {};
             const abbrToCode = {};
-            Object.keys(targetTeams).forEach(c => {
-                if (targetTeams[c]?.espnId) espnIdToCode[String(targetTeams[c].espnId)] = c;
-                abbrToCode[c.toUpperCase()] = c;
+            Object.keys(targetTeams).forEach(code => {
+                if (targetTeams[code]?.espnId) espnIdToCode[String(targetTeams[code].espnId)] = code;
+                abbrToCode[code.toUpperCase()] = code;
             });
 
-            // STEP 1: Fetch Official 20-Club Standings from ESPN API into Database Layer
+            // 1. Sync Standings from ESPN API (supports both flat League tables and multi-group UNL hierarchies)
             try {
-                const standingsRes = await fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${cfg.espnSlug}/standings`);
-                if (standingsRes.ok) {
-                    const standingsData = await standingsRes.json();
-                    const rawEntries = standingsData?.children?.[0]?.standings?.entries || standingsData?.standings?.entries || [];
-                    const maxAllowed = cfg.maxTeams || 20;
-                    const entries = rawEntries.slice(0, maxAllowed);
+                const stRes = await fetch(`https://site.api.espn.com/apis/v2/sports/soccer/${cfg.espnSlug}/standings`);
+                if (stRes.ok) {
+                    const stData = await stRes.json();
+                    const groupEntriesList = [];
+                    const extractStandingsNodes = (node, parentName = '') => {
+                        if (!node) return;
+                        const nodeName = node.name || node.abbreviation || parentName || '';
+                        if (node.standings?.entries && Array.isArray(node.standings.entries)) {
+                            groupEntriesList.push({ groupName: nodeName, entries: node.standings.entries });
+                        }
+                        if (Array.isArray(node.children)) {
+                            node.children.forEach(child => extractStandingsNodes(child, nodeName));
+                        }
+                    };
+                    extractStandingsNodes(stData);
 
-                    if (entries.length >= Math.min(18, maxAllowed)) {
-                        const freshTeams = {};
-                        const freshIdMap = {};
-                        const freshAbbrMap = {};
-
+                    groupEntriesList.forEach(({ entries }) => {
                         entries.forEach((entry, idx) => {
                             const teamIdStr = entry.team?.id ? String(entry.team.id) : null;
-                            let code = (teamIdStr && espnIdToCode[teamIdStr]) ? espnIdToCode[teamIdStr] : null;
-                            if (!code) {
-                                code = resolveOrRegisterTeamFromESPN(entry.team, {});
-                            }
-                            if (!code) return;
-
-                            if (freshTeams[code]) {
-                                const altAbbr = (entry.team?.abbreviation || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
-                                code = (altAbbr && !freshTeams[altAbbr]) ? altAbbr : `${code.slice(0, 2)}${idx + 1}`;
-                            }
-
-                            const baseClub = targetTeams[code] || plTeamsData[code] || laLigaTeamsData[code] || uclTeamsData[code] || {};
-                            freshTeams[code] = JSON.parse(JSON.stringify(baseClub));
-                            if (entry.team?.id) {
-                                freshTeams[code].espnId = Number(entry.team.id);
-                                freshIdMap[String(entry.team.id)] = code;
-                            }
-                            if (entry.team?.abbreviation) {
-                                freshAbbrMap[entry.team.abbreviation.toUpperCase()] = code;
-                            }
-                            freshAbbrMap[code.toUpperCase()] = code;
-
-                            if (entry.team?.displayName || entry.team?.name) freshTeams[code].name = entry.team.displayName || entry.team.name;
-                            if (entry.team?.logos?.[0]?.href) freshTeams[code].logo = entry.team.logos[0].href;
-                            freshTeams[code].short = code;
-                            freshTeams[code].color = freshTeams[code].color || (entry.team?.color ? `#${entry.team.color}` : '#00ff85');
+                            let code = (teamIdStr && espnIdToCode[teamIdStr]) ? espnIdToCode[teamIdStr] : matchTeamNameToCode(entry.team?.displayName || entry.team?.name);
+                            if (!code || !targetTeams[code]) return;
 
                             const stats = {};
                             (entry.stats || []).forEach(s => {
                                 if (s.name) stats[s.name] = s.value ?? Number(s.displayValue);
-                                if (s.type) stats[s.type] = s.value ?? Number(s.displayValue);
                                 if (s.abbreviation) stats[s.abbreviation] = s.value ?? Number(s.displayValue);
                             });
 
-                            const gp = Math.max(1, Number(stats.gamesPlayed ?? stats.GP ?? freshTeams[code].played ?? 1));
-                            const gf = Number(stats.pointsFor ?? stats.F ?? freshTeams[code].gf ?? 0);
-                            const ga = Number(stats.pointsAgainst ?? stats.A ?? freshTeams[code].ga ?? 0);
+                            const gp = Math.max(1, Number(stats.gamesPlayed ?? stats.GP ?? targetTeams[code].played ?? 1));
+                            const gf = Number(stats.pointsFor ?? stats.F ?? targetTeams[code].gf ?? 0);
+                            const ga = Number(stats.pointsAgainst ?? stats.A ?? targetTeams[code].ga ?? 0);
                             const gd = Number(stats.pointDifferential ?? stats.GD ?? (gf - ga));
-                            const pts = Number(stats.points ?? stats.P ?? freshTeams[code].pts ?? 0);
-                            const officialRank = Number(stats.rank ?? entry.note?.rank ?? (idx + 1));
+                            const pts = Number(stats.points ?? stats.P ?? targetTeams[code].pts ?? 0);
 
-                            const gfPerGame = gf / gp;
-                            const gaPerGame = ga / gp;
-
-                            freshTeams[code].xg = Number(Math.max(0.75, Math.min(2.8, (gfPerGame * 0.78) + ((freshTeams[code].xg || 1.35) * 0.22))).toFixed(2));
-                            freshTeams[code].xga = Number(Math.max(0.65, Math.min(2.4, (gaPerGame * 0.78) + ((freshTeams[code].xga || 1.35) * 0.22))).toFixed(2));
-                            freshTeams[code].shots = Math.max(8, Math.min(20, Math.round(freshTeams[code].xg * 7.8)));
-                            freshTeams[code].sot = Math.max(2, Math.min(9, Math.round(freshTeams[code].xg * 2.9)));
-                            freshTeams[code].bigChances = Math.max(1, Math.min(5, Math.round(freshTeams[code].xg * 1.4)));
-                            freshTeams[code].played = gp;
-                            freshTeams[code].gf = gf;
-                            freshTeams[code].ga = ga;
-                            freshTeams[code].gd = gd;
-                            freshTeams[code].pts = pts;
-                            freshTeams[code].espnRank = officialRank;
-                            freshTeams[code].rank = officialRank;
-                            freshTeams[code].form = freshTeams[code].form || ['W','D','L','D','W'];
+                            targetTeams[code].played = gp;
+                            targetTeams[code].gf = gf;
+                            targetTeams[code].ga = ga;
+                            targetTeams[code].gd = gd;
+                            targetTeams[code].pts = pts;
+                            if (cfg.phaseType === 'GROUP_STAGE') {
+                                targetTeams[code].groupRank = Number(stats.rank ?? (idx + 1));
+                            } else {
+                                targetTeams[code].espnRank = Number(stats.rank ?? (idx + 1));
+                            }
 
                             const formStat = (entry.stats || []).find(s => s.name === 'form' || s.type === 'form' || s.abbreviation === 'FORM');
                             const parsedForm = parseFormString(formStat?.displayValue || formStat?.stringValue || formStat?.value);
-                            if (parsedForm && leagueKey !== 'UCL') {
-                                freshTeams[code].form = parsedForm;
-                            }
+                            if (parsedForm) targetTeams[code].form = parsedForm;
                         });
-
-                        if (Object.keys(freshTeams).length === maxAllowed || Object.keys(freshTeams).length >= 18) {
-                            targetTeams = freshTeams;
-                            Object.assign(espnIdToCode, freshIdMap);
-                            Object.assign(abbrToCode, freshAbbrMap);
-                        }
-                    }
+                    });
                 }
             } catch (e) {}
 
-            const resolveScoreboardTeamCode = (teamObj) => {
+            const resolveTeamCode = (teamObj) => {
                 if (!teamObj) return null;
                 if (teamObj.id && espnIdToCode[String(teamObj.id)] && targetTeams[espnIdToCode[String(teamObj.id)]]) {
                     return espnIdToCode[String(teamObj.id)];
                 }
-                const rawAbbr = (teamObj.abbreviation || '').toUpperCase();
-                if (rawAbbr && abbrToCode[rawAbbr] && targetTeams[abbrToCode[rawAbbr]]) {
-                    return abbrToCode[rawAbbr];
-                }
                 const byName = matchTeamNameToCode(teamObj.displayName || teamObj.name || teamObj.shortDisplayName);
-                if (byName && targetTeams[byName]) {
-                    if (teamObj.id) espnIdToCode[String(teamObj.id)] = byName;
-                    return byName;
-                }
-                const lowerTarget = (teamObj.displayName || teamObj.name || '').toLowerCase();
-                if (lowerTarget) {
-                    for (const existingCode of Object.keys(targetTeams)) {
-                        const existingName = (targetTeams[existingCode].name || '').toLowerCase();
-                        if (existingName && (existingName.includes(lowerTarget) || lowerTarget.includes(existingName))) {
-                            if (teamObj.id) espnIdToCode[String(teamObj.id)] = existingCode;
-                            return existingCode;
-                        }
-                    }
-                }
-                const canAddTeam = Object.keys(targetTeams).length < (cfg.maxTeams || 20);
-                return resolveOrRegisterTeamFromESPN(teamObj, targetTeams, canAddTeam);
+                if (byName && targetTeams[byName]) return byName;
+                const abbr = (teamObj.abbreviation || '').toUpperCase();
+                if (abbr && abbrToCode[abbr] && targetTeams[abbrToCode[abbr]]) return abbrToCode[abbr];
+                return null;
             };
 
-            const isESPNEventCompleted = (comp) => {
-                if (!comp) return false;
-                const st = comp.status?.type;
-                if (st?.completed === true) return true;
-                if (st?.state === 'post') return true;
-                if (st?.name === 'STATUS_FULL_TIME' || st?.name === 'STATUS_FINAL_AET' || st?.name === 'STATUS_FINAL_PEN') return true;
-                if (st?.shortDetail === 'FT' || st?.description === 'Full Time') return true;
-                return false;
+            const isEventCompleted = (comp) => {
+                const st = comp?.status?.type;
+                return Boolean(st?.completed === true || st?.state === 'post' || st?.shortDetail === 'FT');
             };
 
-            const parseRawESPNEvent = (ev, explicitRoundCode = null, forceUnplayedStatus = false) => {
-                const comp = ev.competitions?.[0];
+            const parseRawESPNEvent = (ev, explicitRoundCode = null) => {
+                const comp = ev?.competitions?.[0];
                 if (!comp) return null;
                 const homeComp = (comp.competitors || []).find(c => c.homeAway === 'home');
                 const awayComp = (comp.competitors || []).find(c => c.homeAway === 'away');
                 if (!homeComp || !awayComp) return null;
 
-                const hCode = resolveScoreboardTeamCode(homeComp.team);
-                const aCode = resolveScoreboardTeamCode(awayComp.team);
+                const hCode = resolveTeamCode(homeComp.team);
+                const aCode = resolveTeamCode(awayComp.team);
                 if (!hCode || !aCode || !targetTeams[hCode] || !targetTeams[aCode]) return null;
+
+                // STRICT GROUP-STAGE INVARIANT: In Group Stage mode, reject any cross-group fixture
+                if (cfg.phaseType === 'GROUP_STAGE') {
+                    const hGroup = targetTeams[hCode]?.group;
+                    const aGroup = targetTeams[aCode]?.group;
+                    if (!hGroup || !aGroup || hGroup !== aGroup) return null;
+                }
 
                 if (!this.lastRawESPNFixtureSample) {
                     this.lastRawESPNFixtureSample = {
                         id: ev.id,
                         date: ev.date,
                         name: ev.name,
-                        shortName: ev.shortName,
-                        week: ev.week || null,
-                        competition: {
-                            date: comp.date,
-                            status: comp.status?.type,
-                            competitors: (comp.competitors || []).map(c => ({
-                                id: c.id,
-                                homeAway: c.homeAway,
-                                winner: c.winner,
-                                score: c.score,
-                                team: {
-                                    id: c.team?.id,
-                                    displayName: c.team?.displayName,
-                                    abbreviation: c.team?.abbreviation,
-                                    logo: c.team?.logo || c.team?.logos?.[0]?.href
-                                }
-                            }))
-                        }
+                        shortName: ev.shortName
                     };
                 }
 
-                const isDone = forceUnplayedStatus ? false : isESPNEventCompleted(comp);
+                const isDone = isEventCompleted(comp);
                 const hScore = homeComp.score?.displayValue ?? homeComp.score?.value ?? homeComp.score ?? '0';
                 const aScore = awayComp.score?.displayValue ?? awayComp.score?.value ?? awayComp.score ?? '0';
-                const isFeatured = topClubs.has(hCode) || topClubs.has(aCode);
-
-                const extractStat = (competitor, names) => {
-                    const st = (competitor.statistics || []).find(s => names.includes(s.name) || names.includes(s.abbreviation));
-                    return st ? parseFloat(st.displayValue || st.value || 0) : 0;
-                };
-
                 const weekNum = ev.week?.number || comp.week?.number || null;
                 const roundCode = explicitRoundCode || (weekNum ? `${cfg.roundPrefix}${weekNum}` : null);
-                const shortLabel = isDone
-                    ? `${hCode} ${hScore}-${aScore} ${aCode}`
-                    : `${isFeatured ? '⭐ ' : ''}${hCode} vs ${aCode}`;
+                const shortLabel = isDone ? `${hCode} ${hScore}-${aScore} ${aCode}` : `${hCode} vs ${aCode}`;
 
                 return {
                     eventId: String(ev.id || `${hCode}_${aCode}_${ev.date}`),
                     round: roundCode,
                     weekNumber: weekNum ? Number(weekNum) : null,
-                    featured: isFeatured,
                     homeCode: hCode,
                     awayCode: aCode,
                     shortLabel,
                     utcIso: ev.date || comp.date,
-                    status: isDone ? 'FT' : (roundCode || activeRound),
+                    status: isDone ? 'FT' : (roundCode || cfg.activeRound),
                     hScore: isDone ? Number(hScore) : undefined,
                     aScore: isDone ? Number(aScore) : undefined,
-                    name: isDone
-                        ? `${hCode} ${hScore} - ${aScore} ${aCode} (${roundCode || 'FT'})`
-                        : `${shortLabel} (${roundCode || activeRound})`,
-                    homeShots: extractStat(homeComp, ['totalShots', 'shots', 'SH']),
-                    homeSot: extractStat(homeComp, ['shotsOnTarget', 'SOT']),
-                    awayShots: extractStat(awayComp, ['totalShots', 'shots', 'SH']),
-                    awaySot: extractStat(awayComp, ['shotsOnTarget', 'SOT']),
-                    homePoss: extractStat(homeComp, ['possessionPct', 'possession', 'POSS'])
+                    name: `${shortLabel} (${roundCode || cfg.activeRound})`,
+                    homeShots: 0,
+                    homeSot: 0,
+                    awayShots: 0,
+                    awaySot: 0,
+                    homePoss: 0
                 };
             };
 
-            // STEP 2: Harvest All 380 Season Fixtures from all 20 clubs' `/schedule` (results) + `/schedule?fixture=true` (upcoming) + `/scoreboard`
             const harvestedByEventId = new Map();
-            const eventRoundVotes = new Map(); // eventId -> array of 1-based matchday indices (1..38) from both teams' full 38-match schedules
-            const activeScoreboardMatches = [];
+            const eventRoundVotes = new Map();
 
-            // 2A. Query Default Scoreboard FIRST to see what ESPN considers the live active week and matches
             try {
                 const sbRes = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${cfg.espnSlug}/scoreboard?limit=100`);
                 if (sbRes.ok) {
                     const sbData = await sbRes.json();
-                    if (sbData.week?.number && leagueKey !== 'LALIGA') {
-                        activeRound = `${cfg.roundPrefix}${sbData.week.number}`;
-                    }
                     (sbData.events || []).forEach(ev => {
-                        const parsed = parseRawESPNEvent(ev, activeRound);
-                        if (parsed) {
-                            harvestedByEventId.set(parsed.eventId, parsed);
-                            if (parsed.status !== 'FT' && !activeScoreboardMatches.some(m => m.eventId === parsed.eventId)) {
-                                activeScoreboardMatches.push({ ...parsed, round: activeRound, status: activeRound });
-                            }
-                        }
+                        const parsed = parseRawESPNEvent(ev, cfg.activeRound);
+                        if (parsed) harvestedByEventId.set(parsed.eventId, parsed);
                     });
                 }
             } catch (e) {}
 
-            // 2B. Query BOTH `/teams/{id}/schedule` (past results) AND `/teams/{id}/schedule?fixture=true` (upcoming fixtures) for all 20 clubs
+            // 2. Harvest full season / group schedules & last-5 completed match forms across teams
             const clubCodesWithId = Object.keys(targetTeams).filter(c => targetTeams[c]?.espnId);
             await Promise.allSettled(clubCodesWithId.map(async (code) => {
                 const espnId = targetTeams[code].espnId;
@@ -837,7 +868,6 @@
                         });
                     }
 
-                    // Filter strictly to valid league events between the 20 league clubs & sort chronologically (0..37 -> GW1..GW38)
                     const validLeagueEvents = [];
                     Array.from(combinedEventMap.values()).forEach(ev => {
                         const parsed = parseRawESPNEvent(ev, null);
@@ -848,9 +878,8 @@
 
                     validLeagueEvents.sort((a, b) => new Date(a.rawEv.date).getTime() - new Date(b.rawEv.date).getTime());
 
-                    // Extract 5-match chronological form from completed league matches
                     const completedLeagueItems = validLeagueEvents.filter(item => item.parsed.status === 'FT');
-                    if (completedLeagueItems.length >= 3 && leagueKey !== 'UCL') {
+                    if (completedLeagueItems.length >= 1) {
                         const last5 = completedLeagueItems.slice(-5).map(({ rawEv }) => {
                             const comp = rawEv.competitions[0];
                             const ourSide = (comp.competitors || []).find(c => String(c.team?.id) === String(espnId) || String(c.id) === String(espnId));
@@ -866,15 +895,17 @@
                             }
                             return 'D';
                         });
-                        while (last5.length < 5) last5.unshift('D');
+                        const existingForm = targetTeams[code].form || ['D', 'D', 'D', 'D', 'D'];
+                        while (last5.length < 5) {
+                            last5.unshift(existingForm[5 - 1 - last5.length] || 'D');
+                        }
                         targetTeams[code].form = last5.slice(-5);
                     }
 
-                    // Assign each club's chronological league match (0..37) to its exact 1-based Gameweek (1..38)
                     validLeagueEvents.slice(0, cfg.totalRounds).forEach(({ parsed }, idx) => {
                         const explicitWeek = parsed.weekNumber;
-                        const inferredRoundNum = explicitWeek
-                            ? Math.min(cfg.totalRounds, Math.max(1, explicitWeek))
+                        const inferredRoundNum = (explicitWeek && explicitWeek >= 1 && explicitWeek <= cfg.totalRounds)
+                            ? explicitWeek
                             : Math.min(cfg.totalRounds, idx + 1);
                         if (!eventRoundVotes.has(parsed.eventId)) {
                             eventRoundVotes.set(parsed.eventId, []);
@@ -885,148 +916,61 @@
                 } catch (e) {}
             }));
 
-            // STEP 3: Bucket Harvested ESPN Fixtures Strictly by Their Assigned Gameweek (`MD1`..`MD38` / `MW1`..`MW38`)
-            const allHarvested = sortFixturesChronologically(Array.from(harvestedByEventId.values()));
-            const finalFixtures = [];
-
-            if (allHarvested.length >= 10 && leagueKey !== 'UCL') {
-                const roundBuckets = {};
-                const roundClubUsed = {};
-                for (let r = 1; r <= cfg.totalRounds; r++) {
-                    const rCode = `${cfg.roundPrefix}${r}`;
-                    roundBuckets[rCode] = [];
-                    roundClubUsed[rCode] = new Set();
-                }
-
-                const placedEventIds = new Set();
-
-                // Compute each event's consensus Round Number (1..38) from the two participating clubs' 38-match schedules
-                const getConsensusRoundNum = (fix) => {
-                    if (fix.weekNumber && fix.weekNumber >= 1 && fix.weekNumber <= cfg.totalRounds) {
-                        return fix.weekNumber;
-                    }
-                    const votes = eventRoundVotes.get(fix.eventId) || [];
-                    if (votes.length > 0) {
-                        return Math.min(cfg.totalRounds, Math.max(1, Math.round(votes.reduce((a, b) => a + b, 0) / votes.length)));
-                    }
-                    return null;
-                };
-
-                // Pass A: Place every fixture into its exact consensus Gameweek (`rNum`)
-                allHarvested.forEach(fix => {
-                    if (placedEventIds.has(fix.eventId)) return;
-                    const rNum = getConsensusRoundNum(fix);
-                    if (!rNum) return;
-
-                    const rCode = `${cfg.roundPrefix}${rNum}`;
-                    if (roundBuckets[rCode] &&
-                        roundBuckets[rCode].length < cfg.matchesPerRound &&
-                        !roundClubUsed[rCode].has(fix.homeCode) &&
-                        !roundClubUsed[rCode].has(fix.awayCode)) {
-                        const isDone = (fix.status === 'FT');
-                        const shortLabel = isDone
-                            ? fix.shortLabel
-                            : `${fix.featured ? '⭐ ' : ''}${fix.homeCode} vs ${fix.awayCode}`;
-                        const cloned = {
-                            ...fix,
-                            round: rCode,
-                            status: isDone ? 'FT' : rCode,
-                            shortLabel,
-                            name: isDone ? `${fix.homeCode} ${fix.hScore} - ${fix.aScore} ${fix.awayCode} (${rCode} FT)` : `${shortLabel} (${rCode})`
-                        };
-                        roundBuckets[rCode].push(cloned);
-                        roundClubUsed[rCode].add(fix.homeCode);
-                        roundClubUsed[rCode].add(fix.awayCode);
-                        placedEventIds.add(fix.eventId);
-                    }
-                });
-
-                // Pass B: For any match where one club had a 1-week schedule offset due to a postponed game, check `rNum - 1` or `rNum + 1` ONLY (never jump from GW1 to GW12!)
-                allHarvested.forEach(fix => {
-                    if (placedEventIds.has(fix.eventId)) return;
-                    const rNum = getConsensusRoundNum(fix);
-                    if (!rNum) return;
-                    const nearbyRounds = [rNum - 1, rNum + 1, rNum - 2, rNum + 2].filter(n => n >= 1 && n <= cfg.totalRounds);
-                    for (const candNum of nearbyRounds) {
-                        const rCode = `${cfg.roundPrefix}${candNum}`;
-                        if (roundBuckets[rCode].length < cfg.matchesPerRound &&
-                            !roundClubUsed[rCode].has(fix.homeCode) &&
-                            !roundClubUsed[rCode].has(fix.awayCode)) {
-                            const isDone = (fix.status === 'FT');
-                            const shortLabel = isDone
-                                ? fix.shortLabel
-                                : `${fix.featured ? '⭐ ' : ''}${fix.homeCode} vs ${fix.awayCode}`;
-                            roundBuckets[rCode].push({
-                                ...fix,
-                                round: rCode,
-                                status: isDone ? 'FT' : rCode,
-                                shortLabel,
-                                name: isDone ? `${fix.homeCode} ${fix.hScore} - ${fix.aScore} ${fix.awayCode} (${rCode} FT)` : `${shortLabel} (${rCode})`
-                            });
-                            roundClubUsed[rCode].add(fix.homeCode);
-                            roundClubUsed[rCode].add(fix.awayCode);
-                            placedEventIds.add(fix.eventId);
-                            break;
-                        }
-                    }
-                });
-
-                Object.keys(roundBuckets).forEach(rCode => {
-                    finalFixtures.push(...sortFixturesChronologically(roundBuckets[rCode]));
-                });
-            } else {
-                const rawSeedFixtures = leagueFixturesData[leagueKey] || [];
-                const seedActive = rawSeedFixtures.filter(f => f.round === activeRound);
-                const completeActive = ensureCompleteRoundMatches(
-                    activeScoreboardMatches,
-                    seedActive,
-                    targetTeams,
-                    activeRound,
-                    cfg.matchesPerRound,
-                    false
-                ).map(f => ({ ...f, status: activeRound }));
-                finalFixtures.push(...rawSeedFixtures.filter(f => f.round !== activeRound), ...completeActive);
+            // Harvest into roundBuckets and fill any remaining slots from verified intra-group seed fixtures so every Matchday has all 26 matches
+            const roundBuckets = {};
+            const roundClubUsed = {};
+            for (let r = 1; r <= cfg.totalRounds; r++) {
+                const rCode = `${cfg.roundPrefix}${r}`;
+                roundBuckets[rCode] = [];
+                roundClubUsed[rCode] = new Set();
             }
 
-            dbLeague.formSeededFromESPN = true;
+            const allHarvested = sortFixturesChronologically(Array.from(harvestedByEventId.values()));
+            allHarvested.forEach(fix => {
+                if (cfg.phaseType === 'GROUP_STAGE' && targetTeams[fix.homeCode]?.group !== targetTeams[fix.awayCode]?.group) {
+                    return;
+                }
+                const votes = eventRoundVotes.get(fix.eventId) || [];
+                const rNum = (fix.weekNumber && fix.weekNumber >= 1 && fix.weekNumber <= cfg.totalRounds)
+                    ? fix.weekNumber
+                    : (votes.length > 0 ? Math.min(cfg.totalRounds, Math.max(1, Math.round(votes.reduce((a, b) => a + b, 0) / votes.length))) : null);
+                const rCode = rNum ? `${cfg.roundPrefix}${rNum}` : (fix.round || cfg.activeRound);
+                if (roundBuckets[rCode] &&
+                    roundBuckets[rCode].length < cfg.matchesPerRound &&
+                    !roundClubUsed[rCode].has(fix.homeCode) &&
+                    !roundClubUsed[rCode].has(fix.awayCode)) {
+                    roundBuckets[rCode].push({ ...fix, round: rCode });
+                    roundClubUsed[rCode].add(fix.homeCode);
+                    roundClubUsed[rCode].add(fix.awayCode);
+                }
+            });
+
+            // Guarantee all 26 intra-group matches per Matchday for UNL (and full round fixtures for PL/LaLiga/UCL)
+            (leagueFixturesData[leagueKey] || []).forEach(seedFix => {
+                const rCode = seedFix.round;
+                if (cfg.phaseType === 'GROUP_STAGE' && targetTeams[seedFix.homeCode]?.group !== targetTeams[seedFix.awayCode]?.group) {
+                    return;
+                }
+                if (roundBuckets[rCode] &&
+                    roundBuckets[rCode].length < cfg.matchesPerRound &&
+                    !roundClubUsed[rCode].has(seedFix.homeCode) &&
+                    !roundClubUsed[rCode].has(seedFix.awayCode)) {
+                    roundBuckets[rCode].push(seedFix);
+                    roundClubUsed[rCode].add(seedFix.homeCode);
+                    roundClubUsed[rCode].add(seedFix.awayCode);
+                }
+            });
+
+            const finalFixtures = [];
+            Object.keys(roundBuckets).forEach(rCode => {
+                finalFixtures.push(...sortFixturesChronologically(roundBuckets[rCode]));
+            });
+
             this.saveLeague(leagueKey, targetTeams, finalFixtures, true);
-
-            return {
-                teams: this.getLeague(leagueKey).teams,
-                fixtures: this.getLeague(leagueKey).fixtures,
-                activeRound,
-                fromCache: false
-            };
-        },
-
-        exportSnapshot() {
-            if (!this.state) this.init();
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.state, null, 2));
-            const a = document.createElement('a');
-            a.setAttribute("href", dataStr);
-            a.setAttribute("download", `football_db_snapshot_${this.DB_VERSION}.json`);
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-        },
-
-        /**
-         * Exports a ready-to-save `football_db.js` file containing the live ESPN-synced
-         * teams, standings, 5-match forms, and all 380 fixtures baked directly into the JS file.
-         */
-        exportAsJSFile() {
-            if (!this.state) this.init();
-            const jsSource = `// Auto-generated FootballDB Snapshot from Live ESPN API (${new Date().toISOString()})\nwindow.__PRELOADED_FOOTBALL_DB_STATE__ = ${JSON.stringify(this.state, null, 2)};\n`;
-            const dataStr = "data:text/javascript;charset=utf-8," + encodeURIComponent(jsSource);
-            const a = document.createElement('a');
-            a.setAttribute("href", dataStr);
-            a.setAttribute("download", "football_db_espn_synced.js");
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            return { changed: true, activeRound: cfg.activeRound };
         }
     };
 
     FootballDB.init();
     global.FootballDB = FootballDB;
-})(window);
+})(typeof window !== 'undefined' ? window : this);
